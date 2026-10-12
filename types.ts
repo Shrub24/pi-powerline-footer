@@ -35,6 +35,7 @@ export type ColorScheme = Partial<Record<SemanticColor, ColorValue>>;
 
 // Built-in segment identifiers
 export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
+  "messages",
   "model",
   "shell_mode",
   "path",
@@ -126,6 +127,8 @@ export interface StatusLineLayout {
   secondary?: StatusLineSegmentId[];
   /** Rounded frame only: footer pills under the frame, before the extension statuses. A group renders as one pill. */
   footer?: StatusLineSegmentId[][];
+  /** Rounded frame only: one pill flush right on the footer row, reserved before the footer items fit. */
+  footerRight?: StatusLineSegmentId[];
 }
 
 export interface CustomStatusItem {
@@ -247,6 +250,8 @@ export interface SegmentContext {
   speed?: SpeedSample;
   /** The running or last finished tool, or idle before any has run. */
   tool: ToolActivity;
+  /** User-role messages on the session branch: pi-starship's turn count. */
+  userTurnCount: number;
 
   // Extension statuses
   extensionStatuses: ReadonlyMap<string, string>;

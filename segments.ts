@@ -447,6 +447,14 @@ const timeSpentSegment: StatusLineSegment = {
   },
 };
 
+/** The session's user-turn count, read from the branch on session start and tree changes, then counted per prompt. */
+const messagesSegment: StatusLineSegment = {
+  id: "messages",
+  render(ctx) {
+    return { content: color(ctx, "tokens", withIcon(getIcons().messages, `${ctx.userTurnCount}`)), visible: true };
+  },
+};
+
 const timeSegment: StatusLineSegment = {
   id: "time",
   render(ctx) {
@@ -599,6 +607,7 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   context_total: contextTotalSegment,
   time_spent: timeSpentSegment,
   time: timeSegment,
+  messages: messagesSegment,
   session: sessionSegment,
   hostname: hostnameSegment,
   cache_read: cacheReadSegment,

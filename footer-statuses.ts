@@ -19,26 +19,21 @@ export interface StatusMember {
 
 export type FooterStyle = "plain" | "blocks" | "pills";
 
-/** The glyphs the footer draws with: powerline arrows for `blocks`, round caps for `pills`. */
+/** The glyphs the footer draws with: `divider` joins pills, `separator` joins blocks, `cap` closes pills. */
 export interface FooterChrome {
   separator: string;
+  divider: string;
   cap: { left: string; right: string };
 }
 
 type Painter = { getFgAnsi(token: string): string };
-/** An item at its natural width: `overhead` columns of padding and edges around its text. */
-interface Piece {
-  text: string;
-  overhead: number;
-  /** Kept only while the item is whole: a cut text no longer lines up with its members. */
-  members?: StatusMember[];
-}
-type Painted = Piece & { background: string };
+type Painted = { text: string; background: string; members?: StatusMember[] };
 
 const SGR = /\x1b\[[0-9;]*m/g;
 const BLOCK_FOREGROUND = "\x1b[1m\x1b[30m";
 const DEFAULT_BACKGROUND = "\x1b[49m";
 const RESET = "\x1b[0m";
+const PLAIN_GAP = "   ";
 // Backgrounds for items without a usable colour, in order.
 const ROTATION = ["accent", "success", "warning", "borderAccent", "customMessageLabel"];
 
@@ -55,58 +50,16 @@ function backgroundFor(theme: Painter, index: number, color: string | undefined)
 // An item's edge glyphs are drawn in its own colour, so they read as the item's outline.
 const foregroundOf = (background: string): string => background.replace("\x1b[48;", "\x1b[38;");
 
-const naturalWidth = (piece: Piece): number => piece.overhead + visibleWidth(piece.text);
-
-/**
- * Keeps the leading pieces that fit `available` at a one-column minimum gap, dropping trailing ones whole,
- * so statuses go before groups. A lone piece that is still too wide is cut to fit. The spare columns are
- * spread evenly over the gaps between the kept pieces; the remainder goes to the earlier gaps.
- */
-function spread<T extends Piece>(pieces: T[], available: number): { kept: T[]; gaps: number[] } {
-  const span = (list: Piece[]) => list.reduce((sum, piece) => sum + naturalWidth(piece), 0) + list.length - 1;
-  let kept = pieces;
-  while (kept.length > 1 && span(kept) > available) kept = kept.slice(0, -1);
-  if (kept.length === 1 && naturalWidth(kept[0]!) > available) {
-    const room = available - kept[0]!.overhead;
-    kept = room > 0 ? [{ ...kept[0]!, text: truncateToWidth(kept[0]!.text, room, "…"), members: undefined }] : [];
-  }
-
-  const count = kept.length - 1;
-  if (count <= 0) return { kept, gaps: [] };
-  const slack = available - kept.reduce((sum, piece) => sum + naturalWidth(piece), 0);
-  const base = Math.floor(slack / count);
-  const extra = slack % count;
-  return { kept, gaps: Array.from({ length: count }, (_, index) => base + (index < extra ? 1 : 0)) };
-}
-
-function paintAll(items: StatusBlock[], theme: Painter, overhead: number): Painted[] {
+function paintAll(items: StatusBlock[], theme: Painter, first = 0): Painted[] {
   const painted: Painted[] = [];
   items.forEach((item, index) => {
-    const background = backgroundFor(theme, index, item.color);
+    const background = backgroundFor(theme, first + index, item.color);
     if (background) {
       const members = item.members?.map((member) => ({ ...member, text: member.text.replace(SGR, "") }));
-      painted.push({ text: item.text.replace(SGR, ""), overhead, background, members });
+      painted.push({ text: item.text.replace(SGR, ""), background, members });
     }
   });
   return painted;
-}
-
-/**
- * Powerline sections: each ` text ` on its own background with dark text. The separator glyph opens each
- * gap, and a closing glyph ends the row, so the row fills `width` exactly once two blocks fit.
- */
-export function renderStatusBlocks(items: StatusBlock[], width: number, theme: Painter, glyph: string): string {
-  const { kept, gaps } = spread(paintAll(items, theme, 2), width - visibleWidth(glyph));
-  if (kept.length === 0) return "";
-
-  let row = "";
-  kept.forEach(({ text, background }, index) => {
-    if (index > 0) {
-      row += `${DEFAULT_BACKGROUND}${foregroundOf(kept[index - 1]!.background)}${glyph}${" ".repeat(gaps[index - 1]! - 1)}`;
-    }
-    row += `${background}${BLOCK_FOREGROUND} ${text} `;
-  });
-  return `${row}${foregroundOf(kept.at(-1)!.background)}${DEFAULT_BACKGROUND}${glyph}${RESET}`;
 }
 
 /**
@@ -124,41 +77,61 @@ function pillText(text: string, members: StatusMember[] | undefined, background:
     .join(`${BLOCK_FOREGROUND}${SEP_DOT}`);
 }
 
-/** Each item as a pill: its text between round caps on a background. Fills `width` once two pills fit. */
-export function renderStatusPills(items: StatusBlock[], width: number, theme: Painter, cap: FooterChrome["cap"]): string {
-  const overhead = visibleWidth(cap.left) + visibleWidth(cap.right) + 2;
-  const { kept, gaps } = spread(paintAll(items, theme, overhead), width);
-  return kept
-    .map(({ text, background, members }, index) => {
-      const edge = foregroundOf(background);
-      const joint = index > 0 ? " ".repeat(gaps[index - 1]!) : "";
-      const inner = pillText(text, members, background, theme);
-      return `${joint}${DEFAULT_BACKGROUND}${edge}${cap.left}${background}${BLOCK_FOREGROUND} ${inner} ${DEFAULT_BACKGROUND}${edge}${cap.right}${RESET}`;
+/** Pills as one statusline: round caps at the ends, a curved divider in the previous section's colour between neighbours. */
+function pillLine(sections: Painted[], chrome: FooterChrome, theme: Painter): string {
+  if (sections.length === 0) return "";
+  const body = sections
+    .map((section, index) => {
+      const previous = sections[index - 1];
+      const lead = previous
+        ? `${section.background}${foregroundOf(previous.background)}${chrome.divider}`
+        : `${DEFAULT_BACKGROUND}${foregroundOf(section.background)}${chrome.cap.left}`;
+      return `${lead}${section.background}${BLOCK_FOREGROUND} ${pillText(section.text, section.members, section.background, theme)} `;
     })
     .join("");
+  const last = sections.at(-1)!;
+  return `${body}${DEFAULT_BACKGROUND}${foregroundOf(last.background)}${chrome.cap.right}${RESET}`;
 }
 
-/** The compact plain join of extension statuses, each isolated from its neighbours' styling. */
-export function joinStatuses(statuses: StatusBlock[], theme: ThemeLike): string {
-  return statuses
-    .map(({ text, color }) => `\x1b[0m${color ? applyColor(theme, color, text) : text}\x1b[0m`)
-    .join(SEP_DOT);
-}
-
-function renderPlainLine(items: StatusBlock[], width: number, theme: ThemeLike): string {
-  const pieces = items
-    .filter(({ text }) => text)
-    .map(({ text, color }): Piece => ({ text: color ? applyColor(theme, color, text) : text, overhead: 0 }));
-  const { kept, gaps } = spread(pieces, width);
-  return kept
-    .map(({ text }, index) => (index > 0 ? " ".repeat(gaps[index - 1]!) : "") + bold(text))
+/** Blocks as an arrow-joined statusline, each section with one space of padding and the arrow closing the row. */
+function blockLine(sections: Painted[], chrome: FooterChrome, theme: Painter): string {
+  if (sections.length === 0) return "";
+  const body = sections
+    .map((section, index) => {
+      const previous = sections[index - 1];
+      const lead = previous ? `${DEFAULT_BACKGROUND}${foregroundOf(previous.background)}${chrome.separator}` : "";
+      return `${lead}${section.background}${BLOCK_FOREGROUND} ${pillText(section.text, section.members, section.background, theme)} `;
+    })
     .join("");
+  const last = sections.at(-1)!;
+  return `${body}${DEFAULT_BACKGROUND}${foregroundOf(last.background)}${chrome.separator}${RESET}`;
+}
+
+/**
+ * Keeps the leading items whose line fits `budget`: trailing items drop whole, so statuses go before groups.
+ * A lone item that is still too wide is cut to fit.
+ */
+function fitItems<T extends { text: string }>(items: T[], budget: number, build: (kept: T[]) => string): T[] {
+  let kept = items;
+  while (kept.length > 1 && visibleWidth(build(kept)) > budget) kept = kept.slice(0, -1);
+  const [only] = kept;
+  if (only && visibleWidth(build(kept)) > budget) {
+    const room = budget - visibleWidth(build([{ ...only, text: "" }]));
+    return room > 0 ? [{ ...only, text: truncateToWidth(only.text, room, "…"), members: undefined }] : [];
+  }
+  return kept;
+}
+
+/** Column of the line's first cell: centred over the width, or over the room left of a reserved right item. */
+function centredOffset(width: number, line: number, reserve: number): number {
+  const symmetric = Math.floor((width - line) / 2);
+  return width - line - symmetric >= reserve ? symmetric : Math.floor((width - reserve - line) / 2);
 }
 
 /**
  * The footer line under the rounded frame, one row below it. Items are the footer groups followed by the
- * extension statuses; when they do not all fit at minimum gaps, trailing ones drop whole. `plain` joins
- * bold text, `blocks` and `pills` draw each item as a shape. Nothing renders when there are no items.
+ * extension statuses. `right` is one pill flush right on the same row, reserved before the items fit.
+ * Pills are centred; blocks and plain are left-aligned. Nothing renders when there is nothing to show.
  */
 export function renderFooterRows(
   items: StatusBlock[],
@@ -166,14 +139,38 @@ export function renderFooterRows(
   theme: ThemeLike & Painter,
   style: FooterStyle,
   chrome: FooterChrome,
+  right?: StatusBlock,
 ): string[] {
-  if (style === "pills") return footerRows(renderStatusPills(items, width, theme, chrome.cap));
-  if (style === "blocks") return footerRows(renderStatusBlocks(items, width, theme, chrome.separator));
-  return footerRows(renderPlainLine(items, width, theme));
+  const rightPainted = right ? paintAll([right], theme, items.length)[0] : undefined;
+  const rightPill = rightPainted ? pillLine([rightPainted], chrome, theme) : "";
+  const rightWidth = visibleWidth(rightPill) < width ? visibleWidth(rightPill) : 0;
+  const reserve = rightWidth > 0 ? rightWidth + 1 : 0;
+  const budget = width - reserve;
+
+  let line: string;
+  if (style === "plain") {
+    const pieces = items
+      .filter(({ text }) => text)
+      .map(({ text, color }) => ({ text: color ? applyColor(theme, color, text) : text }));
+    const build = (kept: typeof pieces) => kept.map(({ text }) => bold(text)).join(PLAIN_GAP);
+    line = build(fitItems(pieces, budget, build));
+  } else {
+    const build = (kept: Painted[]) => (style === "pills" ? pillLine(kept, chrome, theme) : blockLine(kept, chrome, theme));
+    line = build(fitItems(paintAll(items, theme), budget, build));
+  }
+
+  if (!line && rightWidth === 0) return [];
+  const lineWidth = visibleWidth(line);
+  const offset = style === "pills" ? centredOffset(width, lineWidth, reserve) : 0;
+  const pad = width - offset - lineWidth - rightWidth;
+  return ["", `${" ".repeat(offset)}${line}${" ".repeat(pad)}${rightWidth > 0 ? rightPill : ""}`];
 }
 
 const bold = (text: string): string => `\x1b[0m\x1b[1m${text}\x1b[0m`;
 
-function footerRows(line: string): string[] {
-  return line ? ["", line] : [];
+/** The compact plain join of extension statuses, each isolated from its neighbours' styling. */
+export function joinStatuses(statuses: StatusBlock[], theme: ThemeLike): string {
+  return statuses
+    .map(({ text, color }) => `\x1b[0m${color ? applyColor(theme, color, text) : text}\x1b[0m`)
+    .join(SEP_DOT);
 }

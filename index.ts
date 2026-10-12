@@ -1,4 +1,5 @@
 import { completeSpeedSample, noteSpeedFirstToken, startSpeedTiming, type SpeedSample, type SpeedTiming } from "./speed.ts";
+import { countUserTurns } from "./message-count.ts";
 import { ToolActivityTracker } from "./tool-activity.ts";
 import {
   copyToClipboard,
@@ -1130,7 +1131,7 @@ function buildContentFromParts(
  * The rounded frame's segment groups. `ctx` is kept so the Vim label is rendered at paint time: it
  * changes with every mode switch, which the layout cache would otherwise serve stale.
  */
-type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[]; footer: StatusLineSegmentId[][] };
+type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[]; footer: StatusLineSegmentId[][]; footerRight: StatusLineSegmentId[] };
 
 type ResponsiveLayout = { topContent: string; secondaryLines: string[]; frame?: FrameLayout };
 
@@ -1143,7 +1144,7 @@ function renderSegmentContents(ids: StatusLineSegmentId[], ctx: SegmentContext):
 
 function computeRoundedFrameLayout(
   ctx: SegmentContext,
-  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[]; footerSegments: StatusLineSegmentId[][] },
+  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[]; footerSegments: StatusLineSegmentId[][]; footerRightSegments: StatusLineSegmentId[] },
 ): FrameLayout {
   // Top and bottom segments are bold so they stay legible on the border.
   return {
@@ -1154,6 +1155,7 @@ function computeRoundedFrameLayout(
     },
     bottomLeft: renderSegmentContents(segments.secondarySegments.filter((id) => id !== "vim_mode" && id !== "extension_statuses"), ctx).map(boldText),
     footer: segments.footerSegments,
+    footerRight: segments.footerRightSegments,
   };
 }
 
@@ -1370,6 +1372,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let lastLayoutResult: ResponsiveLayout | null = null;
   let lastLayoutTimestamp = 0;
   let layoutDirty = true;
+  let userTurnCount = 0;
   let forceNextLayoutRecompute = false;
   let lastEditorInputAt = 0;
 
@@ -1939,6 +1942,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
     dismissWelcome(currentCtx ?? ctx);
     toolActivity.reset();
+    userTurnCount = countUserTurns(ctx.sessionManager?.getBranch?.() ?? []);
+    layoutDirty = true;
     shellSession?.dispose();
     shellSession = null;
     sessionGeneration++;
@@ -2092,6 +2097,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
   pi.on("session_tree", async (_event, ctx) => {
     currentCtx = ctx;
+    userTurnCount = countUserTurns(ctx.sessionManager?.getBranch?.() ?? []);
+    layoutDirty = true;
     currentThinkingLevel = null;
     liveAssistantUsage = null;
     requestImmediateStatusRender({ deferDuringTyping: false });
@@ -2222,6 +2229,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   pi.on("message_end", async (event, ctx) => {
     currentCtx = ctx;
     coreContextUsageCache.reset();
+    if (event.message.role === "user") {
+      userTurnCount++;
+      layoutDirty = true;
+    }
     if (isSessionAssistantMessage(event.message)) {
       if (event.message.stopReason === "error" || event.message.stopReason === "aborted") {
         liveAssistantUsage = null;
@@ -3071,6 +3082,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       usageStats: { input, output, cacheRead, cacheWrite, cost, subagentCost },
       speed: lastSpeed,
       tool: toolActivity.activity,
+      userTurnCount,
       contextTokens,
       contextPercent,
       contextWindow,
@@ -3128,6 +3140,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       ...mergedSegments.rightSegments,
       ...mergedSegments.secondarySegments,
       ...mergedSegments.footerSegments.flat(),
+      ...mergedSegments.footerRightSegments,
     ];
     let segmentCtx: SegmentContext;
     try {
@@ -3194,10 +3207,12 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         ...frame.footer.flatMap((group) => footerGroupItem(group, frame.ctx) ?? []),
         ...extensionStatusParts(frame.ctx),
       ];
+      const right = frame.footerRight.length > 0 ? footerGroupItem(frame.footerRight, frame.ctx) : undefined;
       return renderFooterRows(items, width, theme, config.statusStyle, {
         separator: getSeparator("powerline").left,
+        divider: icons.pillDivider,
         cap: { left: icons.capLeft, right: icons.capRight },
-      });
+      }, right);
     }
 
     return [...getResponsiveLayout(width, theme).secondaryLines];

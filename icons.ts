@@ -12,6 +12,7 @@ export interface IconSet {
   tokens: string;
   context: string;
   cost: string;
+  messages: string;
   time: string;
   agents: string;
   cache: string;
@@ -23,6 +24,7 @@ export interface IconSet {
   toolIdle: string;
   capLeft: string;
   capRight: string;
+  pillDivider: string;
   input: string;
   output: string;
   host: string;
@@ -73,6 +75,7 @@ export const NERD_ICONS: IconSet = {
   tokens: "\uE26B",     // nf-seti-html (tokens symbol)
   context: "\uF1C0",    // nf-fa-database (stable Nerd Fonts v3 database)
   cost: "\uF155",       // nf-fa-dollar
+  messages: "\u{F0361}", // md-message
   time: "\uF017",       // nf-fa-clock_o
   agents: "\uF0C0",     // nf-fa-users
   cache: "\uF1C0",      // nf-fa-database (cache)
@@ -84,6 +87,7 @@ export const NERD_ICONS: IconSet = {
   toolIdle: "\u{F04B2}",  // nf-md-sleep
   capLeft: "\uE0B6",      // round cap, left edge of a footer pill
   capRight: "\uE0B4",     // round cap, right edge of a footer pill
+  pillDivider: "\uE0B4",  // round cap, joins neighbouring footer sections
   input: "\uF090",      // nf-fa-sign_in (input arrow)
   output: "\uF08B",     // nf-fa-sign_out (output arrow)
   host: "\uF109",       // nf-fa-laptop (host)
@@ -105,6 +109,7 @@ export const ASCII_ICONS: IconSet = {
   tokens: "⊛",
   context: "◫",
   cost: "",
+  messages: "msg",
   time: "◷",
   agents: "AG",
   cache: "cache",
@@ -116,6 +121,7 @@ export const ASCII_ICONS: IconSet = {
   toolIdle: "",
   capLeft: "(",
   capRight: ")",
+  pillDivider: "|",
   input: "in:",
   output: "out:",
   host: "host",

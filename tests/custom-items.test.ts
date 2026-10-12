@@ -125,6 +125,7 @@ test("parsePowerlineConfig preserves reporter layout groups", () => {
     }),
     {
       footerSegments: [],
+      footerRightSegments: [],
       leftSegments: ["model"],
       rightSegments: ["path"],
       secondarySegments: ["thinking"],

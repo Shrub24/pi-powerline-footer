@@ -268,6 +268,12 @@ function normalizeLayout(
     layout[row] = entries.flatMap((entry) => place(row, entry, seen) ?? []);
   }
 
+  // The footer's right item is one pill: a flat list of segment ids.
+  if (Array.isArray(raw.footerRight)) {
+    const seen = new Set<StatusLineSegmentId>();
+    layout.footerRight = raw.footerRight.flatMap((entry) => place("footerRight", entry, seen) ?? []);
+  }
+
   // A footer entry is one segment, a `status:<key>` or an array of them; an array is a group that renders as one pill.
   if (Array.isArray(raw.footer)) {
     const seen = new Set<string>();
@@ -556,6 +562,7 @@ export function mergeSegmentsWithCustomItems(
   rightSegments: StatusLineSegmentId[];
   secondarySegments: StatusLineSegmentId[];
   footerSegments: StatusLineSegmentId[][];
+  footerRightSegments: StatusLineSegmentId[];
 } {
   const layout = options.layout ?? null;
   const explicitlyPlaced = new Set([
@@ -563,6 +570,7 @@ export function mergeSegmentsWithCustomItems(
     ...(layout?.right ?? []),
     ...(layout?.secondary ?? []),
     ...(layout?.footer ?? []).flat(),
+    ...(layout?.footerRight ?? []),
   ]);
   const disabled = new Set(options.disabledSegments ?? []);
 
@@ -594,6 +602,7 @@ export function mergeSegmentsWithCustomItems(
     footerSegments: (layout?.footer ?? [])
       .map((group) => group.filter((id) => !disabled.has(id)))
       .filter((group) => group.length > 0),
+    footerRightSegments: (layout?.footerRight ?? []).filter((id) => !disabled.has(id)),
   };
 }
 
