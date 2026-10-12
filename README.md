@@ -428,12 +428,13 @@ Vim settings live under `powerline.editor.vim`:
 }
 ```
 
-`clipboardMirror` is `all` (default), `yank`, or `never`. `exCommand.piDispatch` lets `:name` dispatch any Pi command, and `:!cmd` run shell commands. `exCommand.copyInputToClipboard` is read from your user-global settings file only: it writes the prompt to the OS clipboard, so a project settings file cannot enable it. `modeColors` are pi-vim theme tokens for the frame label.
+`clipboardMirror` is `all` (default), `yank`, or `never`; mirror writes go through Pi's clipboard support rather than pi-vim's own helper. `exCommand.piDispatch` lets `:name` dispatch any Pi command, and `:!cmd` run shell commands. `exCommand.copyInputToClipboard` is read from your user-global settings file only: it writes the prompt to the OS clipboard, so a project settings file cannot enable it. `modeColors` are pi-vim theme tokens for the frame label.
 
 Standalone pi-vim users move their settings from `piVim.*` to `powerline.editor.vim.*`, and remove the `pi-vim` extension so only one modal editor is loaded.
 
 ### Vim editor limitations
 
+- The OS clipboard is an outbound mirror: yanks and deletes write through Pi's clipboard support (`wl-copy` on Wayland, `xclip`/`xsel` on X11, `pbcopy` on macOS, or OSC 52) according to `clipboardMirror`. `p` and `P` paste from pi-vim's internal register only; to bring system clipboard text into the editor, use Pi's own paste — its paste keybinding or right-click paste — which reads the clipboard and inserts into the installed editor. With no clipboard tool on `PATH` and no terminal for OSC 52, Powerline warns once and yanks stay in the register.
 - `esc` during a pending delayed send puts the held prompt back in the editor instead of reaching Vim, so the mode does not change. `Enter` on an empty editor sends the held prompt immediately.
 - Persistent bash mode is unavailable: `/bash-mode` and its shortcut notify instead of switching. One-off `!command` / `!!command` still run, with completion, but without ghost suggestions.
 - A preset or placement change, and the first-keystroke autocomplete recovery, rebuild the editor: Vim mode, undo history, and registers reset.
