@@ -16,6 +16,7 @@ export interface IconSet {
   agents: string;
   cache: string;
   speed: string;
+  nix: string;
   input: string;
   output: string;
   host: string;
@@ -70,6 +71,7 @@ export const NERD_ICONS: IconSet = {
   agents: "\uF0C0",     // nf-fa-users
   cache: "\uF1C0",      // nf-fa-database (cache)
   speed: "\u{F04C5}",    // nf-md-speedometer
+  nix: "\uF313",         // nf-linux-nixos
   input: "\uF090",      // nf-fa-sign_in (input arrow)
   output: "\uF08B",     // nf-fa-sign_out (output arrow)
   host: "\uF109",       // nf-fa-laptop (host)
@@ -95,6 +97,7 @@ export const ASCII_ICONS: IconSet = {
   agents: "AG",
   cache: "cache",
   speed: "~",
+  nix: "nix",
   input: "in:",
   output: "out:",
   host: "host",

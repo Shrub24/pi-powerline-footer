@@ -284,6 +284,27 @@ const tokenOutSegment: StatusLineSegment = {
   },
 };
 
+// Shell names nix-shell and nix develop set for their own generic shells; they say nothing about the project.
+const GENERIC_NIX_SHELL_NAMES = new Set(["nix-shell", "shell"]);
+
+/** `impure` or `pure` from IN_NIX_SHELL, then the shell's name when it is specific. Undefined outside a nix shell. */
+export function nixShellText(env: NodeJS.ProcessEnv): string | undefined {
+  const state = env.IN_NIX_SHELL;
+  if (state !== "pure" && state !== "impure") return undefined;
+  const name = env.name?.trim();
+  return name && !GENERIC_NIX_SHELL_NAMES.has(name) ? `${state}${SEP_DOT}${name}` : state;
+}
+
+// The nix shell Pi was launched in, read from the environment on each render: no process is spawned.
+const nixSegment: StatusLineSegment = {
+  id: "nix",
+  render(ctx) {
+    const text = nixShellText(process.env);
+    if (!text) return { content: "", visible: false };
+    return { content: color(ctx, "path", `${getIcons().nix} ${text}`), visible: true };
+  },
+};
+
 // Generation speed of the latest completed request: tokens per second, then time to first token.
 const speedSegment: StatusLineSegment = {
   id: "speed",
@@ -555,6 +576,7 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   token_out: tokenOutSegment,
   tokens: tokensSegment,
   speed: speedSegment,
+  nix: nixSegment,
   token_total: tokenTotalSegment,
   cost: costSegment,
   context_pct: contextPctSegment,

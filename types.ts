@@ -44,6 +44,7 @@ export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
   "token_out",
   "tokens",
   "speed",
+  "nix",
   "token_total",
   "cost",
   "context_pct",
