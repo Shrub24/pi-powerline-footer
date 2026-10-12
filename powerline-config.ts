@@ -34,7 +34,7 @@ export interface EditorConfig {
   frame: EditorFrame;
   invalidFrame: string | null;
   /** Blank rows above and below the text inside the rounded frame. */
-  padding: number;
+  padding: EditorPadding;
   invalidPadding: string | null;
   vim: EditorVimSettings;
 }
@@ -329,16 +329,33 @@ function normalizeEditorFrame(value: unknown): { frame: EditorFrame; invalidFram
   };
 }
 
-const EDITOR_PADDING_DEFAULT = 1;
+export interface EditorPadding {
+  top: number;
+  bottom: number;
+}
+
+const EDITOR_PADDING_DEFAULT: Readonly<EditorPadding> = { top: 1, bottom: 0 };
 const EDITOR_PADDING_MAX = 3;
 
-// Whole numbers from 0 up; larger values are capped rather than rejected.
-function normalizeEditorPadding(value: unknown): { padding: number; invalidPadding: string | null } {
-  if (value === undefined) return { padding: EDITOR_PADDING_DEFAULT, invalidPadding: null };
-  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
-    return { padding: Math.min(value, EDITOR_PADDING_MAX), invalidPadding: null };
+// One side: whole numbers from 0 up, capped at the maximum rather than rejected; anything else is invalid.
+function editorPaddingSide(value: unknown, fallback: number): number | null {
+  if (value === undefined) return fallback;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return Math.min(value, EDITOR_PADDING_MAX);
+  return null;
+}
+
+// A number pads both sides; an object `{ top, bottom }` pads each, a missing side taking its default.
+function normalizeEditorPadding(value: unknown): { padding: EditorPadding; invalidPadding: string | null } {
+  if (value === undefined) return { padding: { ...EDITOR_PADDING_DEFAULT }, invalidPadding: null };
+  if (typeof value === "number" || isRecord(value)) {
+    const top = editorPaddingSide(typeof value === "number" ? value : value.top, EDITOR_PADDING_DEFAULT.top);
+    const bottom = editorPaddingSide(typeof value === "number" ? value : value.bottom, EDITOR_PADDING_DEFAULT.bottom);
+    if (top !== null && bottom !== null) return { padding: { top, bottom }, invalidPadding: null };
   }
-  return { padding: EDITOR_PADDING_DEFAULT, invalidPadding: String(value) };
+  return {
+    padding: { ...EDITOR_PADDING_DEFAULT },
+    invalidPadding: typeof value === "object" ? JSON.stringify(value) : String(value),
+  };
 }
 
 function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
@@ -498,7 +515,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     invalidSecondaryOverflow: null,
     welcome: true,
     stashSharpSShortcut: false,
-    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: EDITOR_PADDING_DEFAULT, invalidPadding: null, vim: {} },
+    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: { ...EDITOR_PADDING_DEFAULT }, invalidPadding: null, vim: {} },
     queue: { compactPromptMode: "queue" },
     sendDelayMs: 0,
     autoFollowUp: false,

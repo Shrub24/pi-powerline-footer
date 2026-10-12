@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CURSOR_MARKER, visibleWidth, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import type { EditorFactory } from "../editor-composition.ts";
-import { modeBadge, vendorSeamMembers } from "../vim-editor.ts";
+import { MODE_COLOR_DEFAULTS, modeBadge, vendorSeamMembers } from "../vim-editor.ts";
 import { ModalEditor } from "../vim/index.ts";
 import { stubKeybindings, stubTheme, stubTui, sendKeys } from "../vim/test/harness.ts";
 
@@ -14,6 +14,10 @@ const MODE_COLOR_CODES: Record<string, number> = {
   borderAccent: 2,
   customMessageLabel: 3,
   warning: 4,
+  accent: 5,
+  success: 6,
+  error: 7,
+  muted: 8,
 };
 const BORDER_COLOR_CODE = 9;
 const modeColorEscape = (token: string) => `\x1b[38;5;${MODE_COLOR_CODES[token] ?? 0}m`;
@@ -300,25 +304,24 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
   const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
 
   const rawInsertFrame = h.render();
-  // The label cell's background is the insert token (borderMuted → code 1), not the border rule's.
-  assert.match(rawInsertFrame.at(-1)!, /\x1b\[48;5;1m\x1b\[30m INSERT /, "the label is a background block in the mode colour");
+  // The label cell's background is the insert token (success → code 6), not the border rule's.
+  assert.match(rawInsertFrame.at(-1)!, /\x1b\[48;5;6m\x1b\[30m INSERT /, "the label is a background block in the mode colour");
   const insertFrame = plain(rawInsertFrame);
-  // Top rule, one padding row, the two text rows, one padding row and the bottom rule.
-  assert.equal(insertFrame.length, 6, "top rule, padding, two text rows, padding and bottom rule");
+  // Top rule, one padding row above the text, the two text rows and the bottom rule (no bottom padding by default).
+  assert.equal(insertFrame.length, 5, "top rule, top padding, two text rows and bottom rule");
   assert.ok(insertFrame[0]!.startsWith("\u256d") && insertFrame[0]!.endsWith("\u256e"));
   assert.match(insertFrame[0]!, /Test model/);
   assert.match(insertFrame[1]!, /^\u2502\s+\u2502$/, "the top padding row keeps the rails");
   assert.ok(insertFrame[2]!.startsWith("\u2502 > ") && insertFrame[2]!.endsWith(" \u2502"), "the prompt is on the first text row");
   assert.ok(insertFrame[3]!.startsWith("\u2502   ") && !insertFrame[3]!.includes(">"));
-  assert.match(insertFrame[4]!, /^\u2502\s+\u2502$/, "the bottom padding row keeps the rails");
   assert.ok(insertFrame.at(-1)!.startsWith("\u2570") && insertFrame.at(-1)!.endsWith("\u256f"));
   assert.match(insertFrame.at(-1)!, / INSERT /);
-  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), Array(6).fill(FRAME_WIDTH));
+  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), Array(5).fill(FRAME_WIDTH));
 
   // The label is read at paint time, so a mode switch shows without any layout change.
   sendKeys(editor, ["\x1b"]);
   const rawNormalFrame = h.render();
-  assert.match(rawNormalFrame.at(-1)!, /\x1b\[48;5;2m\x1b\[30m NORMAL /, "the normal label takes the borderAccent background");
+  assert.match(rawNormalFrame.at(-1)!, /\x1b\[48;5;5m\x1b\[30m NORMAL /, "the normal label takes the accent background");
   const normalFrame = plain(rawNormalFrame);
   assert.match(normalFrame.at(-1)!, / NORMAL /);
   assert.doesNotMatch(normalFrame.at(-1)!, / INSERT /);
@@ -327,13 +330,19 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
 test("padding 0 keeps the rounded frame at its two text rows, and padding is capped at three rows", async (t) => {
   const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
 
-  const flat = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 0 } });
+  const flat = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: { top: 0, bottom: 0 } } });
   const flatFrame = plain(flat.render());
   assert.equal(flatFrame.length, 4, "top rule, two text rows and bottom rule");
   assert.ok(flatFrame[1]!.startsWith("\u2502 > "));
 
   const capped = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 9 } });
   assert.equal(plain(capped.render()).length, 2 + 3 + 2 + 3, "padding of 9 is capped at 3 rows above and below");
+});
+
+test("a padding object sets the top and bottom rows separately", async (t) => {
+  const h = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: { top: 2, bottom: 1 } } });
+  const frame = h.render().map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+  assert.equal(frame.length, 1 + 2 + 2 + 1 + 1, "top rule, two top rows, two text rows, one bottom row and bottom rule");
 });
 
 test("the cursor marker stays on the first text row, below the top padding row", async (t) => {
@@ -345,12 +354,46 @@ test("the cursor marker stays on the first text row, below the top padding row",
   assert.equal(raw.findIndex((line) => line.includes(CURSOR_MARKER)), 2, "the marker is on the text row, not a padding row");
 });
 
-test("a mode token with no colour escape gets a reverse-video label, never a bare dim attribute", () => {
+test("a mode token with no colour falls back to that mode's fixed token, never a bare dim attribute", () => {
   const colors = { insert: "borderMuted", normal: "borderAccent", visual: "customMessageLabel", ex: "warning" };
-  // Pi's bundled theme resolves borderMuted to the terminal default: only a dim attribute.
-  const dimOnly = { getFgAnsi: (token: string) => (token === "borderMuted" ? "\x1b[2m" : "\x1b[38;5;2m") };
-  assert.equal(modeBadge(" INSERT ", "insert", colors, dimOnly), "\x1b[7m INSERT \x1b[27m");
+  // Pi's bundled theme resolves borderMuted to the terminal default: only a dim attribute. Insert then takes muted.
+  const dimOnly = { getFgAnsi: (token: string) => (token === "borderMuted" ? "\x1b[2m" : modeColorEscape(token)) };
+  assert.equal(modeBadge(" INSERT ", "insert", colors, dimOnly), `\x1b[48;5;8m\x1b[30m INSERT \x1b[39m\x1b[49m`);
   assert.equal(modeBadge(" NORMAL ", "normal", colors, dimOnly), "\x1b[48;5;2m\x1b[30m NORMAL \x1b[39m\x1b[49m");
+});
+
+test("a mode label with no colour anywhere is reverse video", () => {
+  const noColour = { getFgAnsi: () => { throw new Error("unknown token"); } };
+  assert.equal(modeBadge(" INSERT ", "insert", MODE_COLOR_DEFAULTS, noColour), "\x1b[7m INSERT \x1b[27m");
+});
+
+test("the four default mode labels render four distinct backgrounds", () => {
+  const badges = (["insert", "normal", "visual", "ex"] as const).map((mode) =>
+    modeBadge(` ${mode} `, mode, MODE_COLOR_DEFAULTS, { getFgAnsi: modeColorEscape }),
+  );
+  assert.equal(new Set(badges).size, 4, badges.join("\n"));
+});
+
+test("a Visual selection is highlighted inside the rounded frame, charwise and linewise", async (t) => {
+  const h = await vimHarness(t, { editor: { mode: "vim", frame: "rounded" } });
+  const editor = h.currentEditor();
+  // The Visual selection colour is the visual mode token (warning → code 4) as a background with dark text.
+  const highlight = "\x1b[48;5;4m\x1b[30m";
+  const bodyRow = (lines: string[]) => lines.find((line) => line.replace(/\x1b\[[0-9;]*m/g, "").includes("hello")) ?? "";
+
+  // The editor starts in Insert mode, so the text goes in without an `i`.
+  sendKeys(editor, ["h", "e", "l", "l", "o", "\x1b", "0"]);
+  assert.ok(!bodyRow(h.render()).includes(highlight), "no highlight outside Visual mode");
+
+  sendKeys(editor, ["v", "l"]);
+  const charwise = bodyRow(h.render());
+  assert.match(charwise, new RegExp(`${highlight.replace(/\[/g, "\\[")}h`), "the selected 'h' is highlighted");
+  assert.doesNotMatch(charwise, new RegExp(`${highlight.replace(/\[/g, "\\[")}l`), "the unselected 'll' is not");
+
+  sendKeys(editor, ["\x1b", "0", "V", "l"]);
+  const linewise = bodyRow(h.render());
+  assert.match(linewise, new RegExp(`${highlight.replace(/\[/g, "\\[")}h`), "the whole line is highlighted");
+  assert.match(linewise, new RegExp(`${highlight.replace(/\[/g, "\\[")}llo`), "the tail after the cursor is highlighted again");
 });
 
 test("the Vim backend leaves the frame border in Pi's colour", async (t) => {
@@ -360,8 +403,8 @@ test("the Vim backend leaves the frame border in Pi's colour", async (t) => {
   const labelLine = frame.at(-1) ?? "";
 
   assert.ok(border.includes(borderColorEscape), "the frame border keeps the editor border colour");
-  assert.ok(!border.includes(modeColorEscape("borderMuted")), "the border is not painted in the mode colour");
-  assert.ok(labelLine.includes(modeColorEscape("borderMuted")), "the label uses the insert mode colour");
+  assert.ok(!border.includes(modeColorEscape("success")), "the border is not painted in the mode colour");
+  assert.ok(labelLine.includes(modeColorEscape("success")), "the label uses the insert mode colour");
 });
 
 test("the vendored seam members Powerline reads still exist", () => {

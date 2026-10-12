@@ -100,7 +100,7 @@ let config: PowerlineConfig = {
   invalidSecondaryOverflow: null,
   welcome: true,
   stashSharpSShortcut: false,
-  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: 1, invalidPadding: null, vim: {} },
+  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: { top: 1, bottom: 0 }, invalidPadding: null, vim: {} },
   queue: { compactPromptMode: "queue" },
   sendDelayMs: 0,
   autoFollowUp: false,
@@ -3716,15 +3716,16 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
           // Padding rows sit outside the editor's lines, so the cursor marker stays on its text row.
           const blank = " ".repeat(contentWidth);
-          const paddingRows = Array.from({ length: rounded ? config.editor.padding : 0 }, () => bodyRow(contPrefix, blank));
+          const padding = rounded ? config.editor.padding : { top: 0, bottom: 0 };
+          const paddingRow = () => bodyRow(contPrefix, blank);
 
           // The rounded frame has two text rows at least; the default frame keeps one.
           const textRows: string[] = lines.slice(1, bottomBorderIndex).map((line: string) => line || "");
           while (textRows.length < (rounded ? 2 : 1)) textRows.push(blank);
 
-          result.push(...paddingRows);
+          result.push(...Array.from({ length: padding.top }, paddingRow));
           textRows.forEach((text: string, index: number) => result.push(bodyRow(index === 0 ? promptPrefix : contPrefix, text)));
-          result.push(...paddingRows);
+          result.push(...Array.from({ length: padding.bottom }, paddingRow));
 
           result.push(frameRows ? frameRows.bottom : renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));
 
