@@ -35,6 +35,7 @@ import { ansi, getFgAnsiCode } from "./colors.ts";
 import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
 import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor, renderFrameBorder, type EditorBackendFactory } from "./editor-composition.ts";
+import type { VimRuntime } from "./vim-editor.ts";
 import { EditorPerfProfiler, readEditorPerfOptions } from "./editor-performance.ts";
 import { CoreContextUsageCache, estimateInitialContextTokens, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
 import { isStaleExtensionContextError, shouldShowStartupWelcome } from "./lifecycle.ts";
@@ -90,6 +91,7 @@ let config: PowerlineConfig = {
   invalidSecondaryOverflow: null,
   welcome: true,
   stashSharpSShortcut: false,
+  editor: { mode: "default", invalidMode: null, vim: {} },
   queue: { compactPromptMode: "queue" },
   sendDelayMs: 0,
   autoFollowUp: false,
@@ -609,6 +611,15 @@ function persistStashHistory(history: string[]): void {
 
 function readSettings(cwd: string = process.cwd()): Record<string, unknown> {
   return mergeSettings(readSettingsFile(getSettingsPath()), readSettingsFile(getProjectSettingsPath(cwd)));
+}
+
+/**
+ * The user-global settings file alone. Only `powerline.editor.vim.exCommand` is read from here: the
+ * `copyInputToClipboard` option writes the prompt to the OS clipboard, and a project settings file
+ * may be checked into a repository.
+ */
+function readGlobalSettings(): Record<string, unknown> {
+  return readSettingsFile(getSettingsPath());
 }
 
 function writePowerlineSetting(cwd: string, update: (existingPowerlineSetting: unknown) => unknown): boolean {
@@ -1218,6 +1229,12 @@ function warnInvalidSegmentSettings(ctx: any): void {
     console.warn(`[powerline-footer] ${message}`);
     if (ctx.hasUI) ctx.ui.notify(message, "warning");
   }
+
+  if (config.editor.invalidMode !== null) {
+    const message = `Ignoring invalid powerline editor mode: ${JSON.stringify(config.editor.invalidMode)}`;
+    console.warn(`[powerline-footer] ${message}`);
+    if (ctx.hasUI) ctx.ui.notify(message, "warning");
+  }
 }
 
 export default function powerlineFooter(pi: ExtensionAPI) {
@@ -1225,7 +1242,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   // Owns the factory this instance installs and the foreign factory every rebuild builds on.
   const editorFactoryTracker = createEditorFactoryTracker();
   const startupSettings = readSettings();
-  config = parsePowerlineConfig(startupSettings.powerline, PRESET_NAMES);
+  config = parsePowerlineConfig(startupSettings.powerline, PRESET_NAMES, readGlobalSettings().powerline);
   let resolvedShortcuts = resolveShortcutConfig(startupSettings);
   let bashModeSettings = parseBashModeSettings(startupSettings, resolvedShortcuts);
 
@@ -1260,6 +1277,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let stashedPromptHistory: string[] = readPersistedStashHistory();
   let currentEditor: any = null;
   let bashModeActive = false;
+  // Vim mode only: resolved once per session, because loading the vendored tree is the one part of
+  // the editor setup that cannot happen synchronously.
+  let vimRuntime: VimRuntime | null = null;
+  let vimRuntimeUnavailable = false;
   let bashTranscript = new BashTranscriptStore(bashModeSettings);
   let bashCompletionEngine = new BashCompletionEngine();
   let shellSession: ManagedShellSession | null = null;
@@ -1410,6 +1431,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
   const setBashModeActive = async (value: boolean, ctx: any): Promise<void> => {
     if (value === bashModeActive) return;
+    if (value && config.editor.mode === "vim") {
+      ctx.ui.notify("Persistent bash mode is unavailable with the Vim editor", "warning");
+      return;
+    }
     if (!value && shellSession?.state.running) {
       ctx.ui.notify("Wait for the current shell command to finish before leaving bash mode", "warning");
       return;
@@ -1881,7 +1906,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     resolvedShortcuts = resolveShortcutConfig(settings);
     bashModeSettings = parseBashModeSettings(settings, resolvedShortcuts);
     showLastPrompt = settings.showLastPrompt !== false;
-    config = parsePowerlineConfig(settings.powerline, PRESET_NAMES);
+    config = parsePowerlineConfig(settings.powerline, PRESET_NAMES, readGlobalSettings().powerline);
     warnInvalidSegmentSettings(ctx);
     stashedPromptHistory = readPersistedStashHistory();
     bashModeActive = false;
@@ -1900,6 +1925,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     setVibeWorkingMessageColor(config.workingVibes.color);
 
     if (enabled && ctx.hasUI) {
+      await ensureVimRuntime(ctx);
       setupCustomEditor(ctx);
       if (shouldShowStartupWelcome(event.reason, config.welcome, ctx.mode)) {
         if (settings.quietStartup === true) {
@@ -1920,6 +1946,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     } else {
       clearActiveStashReload(ctx);
     }
+    vimRuntime?.restoreCursorShape(event);
+    vimRuntime = null;
+    vimRuntimeUnavailable = false;
     stashedEditorText = null;
     sessionGeneration++;
     dismissWelcome(ctx);
@@ -2611,6 +2640,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         // Toggle
         enabled = !enabled;
         if (enabled) {
+          await ensureVimRuntime(ctx);
           setupCustomEditor(ctx);
           ctx.ui.notify("Powerline enabled", "info");
         } else {
@@ -2628,6 +2658,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           stashShortcutInputUnsubscribe?.();
           stashShortcutInputUnsubscribe = null;
           restorePendingSend();
+          // The Vim editor owns the terminal cursor shape while Powerline is on.
+          vimRuntime?.restoreCursorShape();
           // Clear all custom UI components
           ctx.ui.setEditorComponent(undefined);
           ctx.ui.setFooter(undefined);
@@ -3208,6 +3240,21 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     }
   }
 
+  async function ensureVimRuntime(ctx: any): Promise<void> {
+    if (vimRuntime || vimRuntimeUnavailable || config.editor.mode !== "vim") return;
+
+    try {
+      // Loaded lazily: Pi's loader (jiti) resolves the vendored tree's `.js` specifiers and enums,
+      // Powerline's own test runner does not, so nothing may import it eagerly.
+      const { createVimRuntime } = await import("./vim-editor.ts");
+      vimRuntime = createVimRuntime({ pi, ctx, settings: config.editor.vim });
+    } catch (error) {
+      vimRuntimeUnavailable = true;
+      console.debug("[powerline-footer] Failed to load the Vim editor:", error);
+      if (ctx.hasUI) ctx.ui.notify("Vim editor unavailable; using the default editor", "warning");
+    }
+  }
+
   function setupCustomEditor(ctx: any) {
     snapshotPromptHistory(currentEditor);
     if (!enabled) {
@@ -3253,7 +3300,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     );
 
     // The default backend: Powerline's bash-mode editor, with no frame label of its own.
-    const createBackend: EditorBackendFactory = (tui, editorTheme, keybindings) => {
+    const createDefaultBackend: EditorBackendFactory = (tui, editorTheme, keybindings) => {
       const editor = new BashModeEditor(tui, editorTheme, keybindings, {
         keybindings,
         isBashModeActive: () => bashModeActive,
@@ -3291,6 +3338,11 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
       return { editor, fastRender: editorPerf.options.fastRender };
     };
+
+    // Vim mode swaps only the editor; every shared enhancement below stays Powerline's.
+    const createBackend: EditorBackendFactory = config.editor.mode === "vim" && vimRuntime
+      ? vimRuntime.createBackend
+      : createDefaultBackend;
 
     const editorFactory = editorFactoryTracker.own((tui: any, editorTheme: any, keybindings: any) => {
       const previousEditor = previousEditorFactory?.(tui, editorTheme, keybindings);

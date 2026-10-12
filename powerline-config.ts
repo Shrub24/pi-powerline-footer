@@ -5,6 +5,33 @@ import type { ColorValue, CustomItemPosition, CustomStatusItem, PowerlinePlaceme
 
 export type CompactPromptMode = "queue" | "native";
 export type SecondaryOverflow = "drop" | "wrap";
+export type EditorMode = "default" | "vim";
+
+export interface EditorVimModeColors {
+  insert?: string;
+  normal?: string;
+  visual?: string;
+  ex?: string;
+}
+
+/** `powerline.editor.vim`: only the settings of the kept Vim features. */
+export interface EditorVimSettings {
+  clipboardMirror?: unknown;
+  exCommand?: unknown;
+  /**
+   * The user-global `exCommand` object. `copyInputToClipboard` writes the prompt to the OS
+   * clipboard, so a checked-in project setting must not be able to enable it — the same policy the
+   * vendored resolver applies to its own `piVim` namespace.
+   */
+  globalExCommand?: unknown;
+  modeColors?: EditorVimModeColors;
+}
+
+export interface EditorConfig {
+  mode: EditorMode;
+  invalidMode: string | null;
+  vim: EditorVimSettings;
+}
 
 export interface PowerlineConfig {
   preset: StatusLinePreset;
@@ -21,6 +48,7 @@ export interface PowerlineConfig {
   invalidSecondaryOverflow: string | null;
   welcome: boolean;
   stashSharpSShortcut: boolean;
+  editor: EditorConfig;
   queue: { compactPromptMode: CompactPromptMode };
   sendDelayMs: number;
   autoFollowUp: boolean;
@@ -232,6 +260,49 @@ function normalizeLayout(
     : { layout: null, invalidLayoutSegments };
 }
 
+function normalizeEditorMode(value: unknown): { mode: EditorMode; invalidMode: string | null } {
+  if (value === undefined) return { mode: "default", invalidMode: null };
+
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "default" || normalized === "vim") {
+    return { mode: normalized, invalidMode: null };
+  }
+
+  return {
+    mode: "default",
+    invalidMode: typeof value === "string" ? value.trim() : String(value),
+  };
+}
+
+function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const colors: EditorVimModeColors = {};
+  for (const key of ["insert", "normal", "visual", "ex"] as const) {
+    const value = raw[key];
+    if (typeof value === "string" && value.trim()) colors[key] = value.trim();
+  }
+
+  return Object.keys(colors).length > 0 ? colors : undefined;
+}
+
+function normalizeEditor(value: unknown, globalValue: unknown): EditorConfig {
+  const { mode, invalidMode } = normalizeEditorMode(isRecord(value) ? value.mode : undefined);
+  const vim = isRecord(value) && isRecord(value.vim) ? value.vim : {};
+  const globalVim = isRecord(globalValue) && isRecord(globalValue.vim) ? globalValue.vim : {};
+
+  return {
+    mode,
+    invalidMode,
+    vim: {
+      clipboardMirror: vim.clipboardMirror,
+      exCommand: vim.exCommand,
+      globalExCommand: globalVim.exCommand,
+      modeColors: normalizeVimModeColors(vim.modeColors),
+    },
+  };
+}
+
 function normalizeQueueOptions(raw: unknown): PowerlineConfig["queue"] {
   if (!isRecord(raw)) return { compactPromptMode: "queue" };
   return {
@@ -322,7 +393,12 @@ export function mergeSegmentOptions(
   };
 }
 
-export function parsePowerlineConfig(value: unknown, presets: readonly StatusLinePreset[]): PowerlineConfig {
+/**
+ * `globalValue` is the user-global `powerline` object. It is only consulted for the one Vim setting
+ * that must not be settable from a checked-in project file (`editor.vim.exCommand`); every other
+ * setting is taken from the merged value. Omitting it keeps that setting at its default.
+ */
+export function parsePowerlineConfig(value: unknown, presets: readonly StatusLinePreset[], globalValue?: unknown): PowerlineConfig {
   const defaultConfig: PowerlineConfig = {
     preset: "default",
     customItems: [],
@@ -338,6 +414,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     invalidSecondaryOverflow: null,
     welcome: true,
     stashSharpSShortcut: false,
+    editor: { mode: "default", invalidMode: null, vim: {} },
     queue: { compactPromptMode: "queue" },
     sendDelayMs: 0,
     autoFollowUp: false,
@@ -370,6 +447,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     invalidSecondaryOverflow,
     welcome: value.welcome !== false,
     stashSharpSShortcut: value.stashSharpSShortcut === true,
+    editor: normalizeEditor(value.editor, isRecord(globalValue) ? globalValue.editor : undefined),
     queue: normalizeQueueOptions(value.queue),
     sendDelayMs: typeof value.sendDelayMs === "number" && Number.isFinite(value.sendDelayMs) && value.sendDelayMs > 0
       ? value.sendDelayMs
