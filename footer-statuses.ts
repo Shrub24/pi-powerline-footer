@@ -19,7 +19,12 @@ export interface FooterChrome {
 }
 
 type Painter = { getFgAnsi(token: string): string };
-type Painted = { text: string; background: string };
+/** An item at its natural width: `overhead` columns of padding and edges around its text. */
+interface Piece {
+  text: string;
+  overhead: number;
+}
+type Painted = Piece & { background: string };
 
 const SGR = /\x1b\[[0-9;]*m/g;
 const BLOCK_FOREGROUND = "\x1b[1m\x1b[30m";
@@ -41,55 +46,66 @@ function backgroundFor(theme: Painter, index: number, color: string | undefined)
 // An item's edge glyphs are drawn in its own colour, so they read as the item's outline.
 const foregroundOf = (background: string): string => background.replace("\x1b[48;", "\x1b[38;");
 
+const naturalWidth = (piece: Piece): number => piece.overhead + visibleWidth(piece.text);
+
 /**
- * Paints the items that fit `width`, in order. Each keeps `overhead` columns for its padding and edges,
- * and `gap` before every item after the first. `reserved` columns stay free for the row's closing edge.
- * An item is cut to the room it has; one that cannot fit whole, and everything after it, is dropped.
+ * Keeps the leading pieces that fit `available` at a one-column minimum gap, dropping trailing ones whole,
+ * so statuses go before groups. A lone piece that is still too wide is cut to fit. The spare columns are
+ * spread evenly over the gaps between the kept pieces; the remainder goes to the earlier gaps.
  */
-function paintFitting(items: StatusBlock[], width: number, theme: Painter, fit: { reserved: number; overhead: number; gap: number }): Painted[] {
-  const painted: Painted[] = [];
-  let used = fit.reserved;
-  for (const [index, item] of items.entries()) {
-    const background = backgroundFor(theme, index, item.color);
-    if (!background) continue;
-    const gap = painted.length > 0 ? fit.gap : 0;
-    const room = width - fit.reserved - fit.overhead - gap;
-    const text = truncateToWidth(item.text.replace(SGR, ""), Math.max(1, room), "…");
-    const itemWidth = visibleWidth(text) + fit.overhead + gap;
-    if (used + itemWidth > width) break;
-    used += itemWidth;
-    painted.push({ text, background });
+function spread<T extends Piece>(pieces: T[], available: number): { kept: T[]; gaps: number[] } {
+  const span = (list: Piece[]) => list.reduce((sum, piece) => sum + naturalWidth(piece), 0) + list.length - 1;
+  let kept = pieces;
+  while (kept.length > 1 && span(kept) > available) kept = kept.slice(0, -1);
+  if (kept.length === 1 && naturalWidth(kept[0]!) > available) {
+    const room = available - kept[0]!.overhead;
+    kept = room > 0 ? [{ ...kept[0]!, text: truncateToWidth(kept[0]!.text, room, "…") }] : [];
   }
+
+  const count = kept.length - 1;
+  if (count <= 0) return { kept, gaps: [] };
+  const slack = available - kept.reduce((sum, piece) => sum + naturalWidth(piece), 0);
+  const base = Math.floor(slack / count);
+  const extra = slack % count;
+  return { kept, gaps: Array.from({ length: count }, (_, index) => base + (index < extra ? 1 : 0)) };
+}
+
+function paintAll(items: StatusBlock[], theme: Painter, overhead: number): Painted[] {
+  const painted: Painted[] = [];
+  items.forEach((item, index) => {
+    const background = backgroundFor(theme, index, item.color);
+    if (background) painted.push({ text: item.text.replace(SGR, ""), overhead, background });
+  });
   return painted;
 }
 
 /**
- * Powerline sections: each `  text  ` on its own background with dark text, joined by the separator glyph
- * with a space either side, and closed by a cap. Returns "" when nothing fits.
+ * Powerline sections: each ` text ` on its own background with dark text. The separator glyph opens each
+ * gap, and a closing glyph ends the row, so the row fills `width` exactly once two blocks fit.
  */
 export function renderStatusBlocks(items: StatusBlock[], width: number, theme: Painter, glyph: string): string {
-  const painted = paintFitting(items, width, theme, { reserved: 1, overhead: 4, gap: 3 });
-  if (painted.length === 0) return "";
+  const { kept, gaps } = spread(paintAll(items, theme, 2), width - visibleWidth(glyph));
+  if (kept.length === 0) return "";
 
   let row = "";
-  painted.forEach(({ text, background }, index) => {
-    if (index > 0) row += `${DEFAULT_BACKGROUND} ${foregroundOf(painted[index - 1]!.background)}${glyph} ${background}`;
-    else row += background;
-    row += `${BLOCK_FOREGROUND}  ${text}  `;
+  kept.forEach(({ text, background }, index) => {
+    if (index > 0) {
+      row += `${DEFAULT_BACKGROUND}${foregroundOf(kept[index - 1]!.background)}${glyph}${" ".repeat(gaps[index - 1]! - 1)}`;
+    }
+    row += `${background}${BLOCK_FOREGROUND} ${text} `;
   });
-  const last = painted[painted.length - 1]!.background;
-  return `${row}${foregroundOf(last)}${DEFAULT_BACKGROUND}${glyph}${RESET}`;
+  return `${row}${foregroundOf(kept.at(-1)!.background)}${DEFAULT_BACKGROUND}${glyph}${RESET}`;
 }
 
-/** Each item as a pill: its text on a background between round caps, one space between pills. Returns "" when nothing fits. */
+/** Each item as a pill: its text between round caps on a background. Fills `width` once two pills fit. */
 export function renderStatusPills(items: StatusBlock[], width: number, theme: Painter, cap: FooterChrome["cap"]): string {
-  const capWidth = visibleWidth(cap.left) + visibleWidth(cap.right);
-  const painted = paintFitting(items, width, theme, { reserved: 0, overhead: 4 + capWidth, gap: 1 });
-  return painted
+  const overhead = visibleWidth(cap.left) + visibleWidth(cap.right) + 2;
+  const { kept, gaps } = spread(paintAll(items, theme, overhead), width);
+  return kept
     .map(({ text, background }, index) => {
       const edge = foregroundOf(background);
-      const joint = index > 0 ? " " : "";
-      return `${joint}${DEFAULT_BACKGROUND}${edge}${cap.left}${background}${BLOCK_FOREGROUND}  ${text}  ${DEFAULT_BACKGROUND}${edge}${cap.right}${RESET}`;
+      const joint = index > 0 ? " ".repeat(gaps[index - 1]!) : "";
+      return `${joint}${DEFAULT_BACKGROUND}${edge}${cap.left}${background}${BLOCK_FOREGROUND} ${text} ${DEFAULT_BACKGROUND}${edge}${cap.right}${RESET}`;
     })
     .join("");
 }
@@ -101,10 +117,20 @@ export function joinStatuses(statuses: StatusBlock[], theme: ThemeLike): string 
     .join(SEP_DOT);
 }
 
+function renderPlainLine(items: StatusBlock[], width: number, theme: ThemeLike): string {
+  const pieces = items
+    .filter(({ text }) => text)
+    .map(({ text, color }): Piece => ({ text: color ? applyColor(theme, color, text) : text, overhead: 0 }));
+  const { kept, gaps } = spread(pieces, width);
+  return kept
+    .map(({ text }, index) => (index > 0 ? " ".repeat(gaps[index - 1]!) : "") + bold(text))
+    .join("");
+}
+
 /**
  * The footer line under the rounded frame, one row below it. Items are the footer groups followed by the
- * extension statuses. `plain` joins them as bold text; `blocks` and `pills` draw each as a shape. Nothing
- * renders when there are no items.
+ * extension statuses; when they do not all fit at minimum gaps, trailing ones drop whole. `plain` joins
+ * bold text, `blocks` and `pills` draw each item as a shape. Nothing renders when there are no items.
  */
 export function renderFooterRows(
   items: StatusBlock[],
@@ -115,12 +141,11 @@ export function renderFooterRows(
 ): string[] {
   if (style === "pills") return footerRows(renderStatusPills(items, width, theme, chrome.cap));
   if (style === "blocks") return footerRows(renderStatusBlocks(items, width, theme, chrome.separator));
-  const line = items.map(({ text, color }) => bold(color ? applyColor(theme, color, text) : text)).join("   ");
-  return footerRows(line ? truncateToWidth(line, width, "…") : null);
+  return footerRows(renderPlainLine(items, width, theme));
 }
 
 const bold = (text: string): string => `\x1b[0m\x1b[1m${text}\x1b[0m`;
 
-function footerRows(line: string | null): string[] {
+function footerRows(line: string): string[] {
   return line ? ["", line] : [];
 }
