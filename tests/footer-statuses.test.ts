@@ -141,3 +141,16 @@ test("the ASCII separator set draws the same colour pairs with a plain glyph", (
   assert.ok(!row.includes(POWERLINE));
   assert.ok(row.includes(`${SUCCESS_FG}${DEFAULT_BG}>`));
 });
+
+test("a group member with its own colour is drawn in that colour inside the pill, which keeps its background", () => {
+  const group = {
+    text: "tokens · reqcap",
+    color: "accent",
+    members: [{ text: "tokens", color: "accent" }, { text: "reqcap", color: "success" }],
+  };
+  assert.equal(
+    renderStatusPills([group], 80, theme, ROUND),
+    // The first member matches the background, so it keeps the dark text; reqcap is tinted.
+    `${DEFAULT_BG}${ACCENT_FG}\uE0B6${ACCENT_BG}${BLOCK_FG} tokens${BLOCK_FG} · ${SUCCESS_FG}reqcap${BLOCK_FG} ${DEFAULT_BG}${ACCENT_FG}\uE0B4\x1b[0m`,
+  );
+});

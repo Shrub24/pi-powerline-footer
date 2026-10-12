@@ -1,5 +1,5 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { themeBackgroundEscape } from "./colors.ts";
+import { themeBackgroundEscape, themeForegroundEscape } from "./colors.ts";
 import { SEP_DOT } from "./icons.ts";
 import { applyColor } from "./theme.ts";
 import type { ColorValue, ThemeLike } from "./types.ts";
@@ -7,6 +7,13 @@ import type { ColorValue, ThemeLike } from "./types.ts";
 export interface StatusBlock {
   text: string;
   /** Theme token or hex colour for the background. Unset or unresolved items take the rotation. */
+  color?: ColorValue;
+  /** A group's members, each with its own colour: drawn inside the same pill, `text` being their join. */
+  members?: StatusMember[];
+}
+
+export interface StatusMember {
+  text: string;
   color?: ColorValue;
 }
 
@@ -23,6 +30,8 @@ type Painter = { getFgAnsi(token: string): string };
 interface Piece {
   text: string;
   overhead: number;
+  /** Kept only while the item is whole: a cut text no longer lines up with its members. */
+  members?: StatusMember[];
 }
 type Painted = Piece & { background: string };
 
@@ -59,7 +68,7 @@ function spread<T extends Piece>(pieces: T[], available: number): { kept: T[]; g
   while (kept.length > 1 && span(kept) > available) kept = kept.slice(0, -1);
   if (kept.length === 1 && naturalWidth(kept[0]!) > available) {
     const room = available - kept[0]!.overhead;
-    kept = room > 0 ? [{ ...kept[0]!, text: truncateToWidth(kept[0]!.text, room, "…") }] : [];
+    kept = room > 0 ? [{ ...kept[0]!, text: truncateToWidth(kept[0]!.text, room, "…"), members: undefined }] : [];
   }
 
   const count = kept.length - 1;
@@ -74,7 +83,10 @@ function paintAll(items: StatusBlock[], theme: Painter, overhead: number): Paint
   const painted: Painted[] = [];
   items.forEach((item, index) => {
     const background = backgroundFor(theme, index, item.color);
-    if (background) painted.push({ text: item.text.replace(SGR, ""), overhead, background });
+    if (background) {
+      const members = item.members?.map((member) => ({ ...member, text: member.text.replace(SGR, "") }));
+      painted.push({ text: item.text.replace(SGR, ""), overhead, background, members });
+    }
   });
   return painted;
 }
@@ -97,15 +109,31 @@ export function renderStatusBlocks(items: StatusBlock[], width: number, theme: P
   return `${row}${foregroundOf(kept.at(-1)!.background)}${DEFAULT_BACKGROUND}${glyph}${RESET}`;
 }
 
+/**
+ * A pill's text. A member with its own colour is drawn in that colour, unless it is the pill's background
+ * colour, when it would vanish: such a member keeps the dark text.
+ */
+function pillText(text: string, members: StatusMember[] | undefined, background: string, theme: Painter): string {
+  if (!members) return text;
+  const backgroundForeground = foregroundOf(background);
+  return members
+    .map((member) => {
+      const foreground = member.color ? themeForegroundEscape(theme, member.color) : undefined;
+      return foreground && foreground !== backgroundForeground ? `${foreground}${member.text}${BLOCK_FOREGROUND}` : member.text;
+    })
+    .join(`${BLOCK_FOREGROUND}${SEP_DOT}`);
+}
+
 /** Each item as a pill: its text between round caps on a background. Fills `width` once two pills fit. */
 export function renderStatusPills(items: StatusBlock[], width: number, theme: Painter, cap: FooterChrome["cap"]): string {
   const overhead = visibleWidth(cap.left) + visibleWidth(cap.right) + 2;
   const { kept, gaps } = spread(paintAll(items, theme, overhead), width);
   return kept
-    .map(({ text, background }, index) => {
+    .map(({ text, background, members }, index) => {
       const edge = foregroundOf(background);
       const joint = index > 0 ? " ".repeat(gaps[index - 1]!) : "";
-      return `${joint}${DEFAULT_BACKGROUND}${edge}${cap.left}${background}${BLOCK_FOREGROUND} ${text} ${DEFAULT_BACKGROUND}${edge}${cap.right}${RESET}`;
+      const inner = pillText(text, members, background, theme);
+      return `${joint}${DEFAULT_BACKGROUND}${edge}${cap.left}${background}${BLOCK_FOREGROUND} ${inner} ${DEFAULT_BACKGROUND}${edge}${cap.right}${RESET}`;
     })
     .join("");
 }

@@ -693,5 +693,6 @@ export function footerGroupItem(group: readonly StatusLineSegmentId[], ctx: Segm
   return {
     text: shown.map((rendered) => rendered.content).join(SEP_DOT),
     color: shown.find((rendered) => rendered.color)?.color,
+    members: shown.map((rendered) => ({ text: rendered.content, color: rendered.color })),
   };
 }

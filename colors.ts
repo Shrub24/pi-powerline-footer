@@ -62,18 +62,20 @@ function getAnsiCode(color: ColorName): string {
  * follows the Pi theme. A hex colour is used as given. Undefined when the token has no colour: Pi's
  * bundled theme can resolve a token to the terminal default, which is only a dim attribute.
  */
-export function themeBackgroundEscape(theme: { getFgAnsi(token: string): string }, token: string): string | undefined {
+export function themeForegroundEscape(theme: { getFgAnsi(token: string): string }, token: string): string | undefined {
   if (token.startsWith("#")) {
     const [r, g, b] = hexToRgb(token);
-    return ansi.getBgAnsi(r, g, b);
+    return ansi.getFgAnsi(r, g, b);
   }
-  let colour: string | undefined;
   try {
-    colour = theme.getFgAnsi(token).match(/^\x1b\[38;[\d;]*m/)?.[0];
+    return theme.getFgAnsi(token).match(/^\x1b\[38;[\d;]*m/)?.[0];
   } catch {
     return undefined;
   }
-  return colour?.replace("\x1b[38;", "\x1b[48;");
+}
+
+export function themeBackgroundEscape(theme: { getFgAnsi(token: string): string }, token: string): string | undefined {
+  return themeForegroundEscape(theme, token)?.replace("\x1b[38;", "\x1b[48;");
 }
 
 /** Bold text whose full resets (`ESC[0m`) inside it keep the bold on. */
