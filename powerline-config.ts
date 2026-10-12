@@ -1,7 +1,7 @@
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { normalizeCostCurrency } from "./currency-rates.ts";
 import { BUILTIN_STATUS_LINE_SEGMENT_IDS } from "./types.ts";
-import type { ColorValue, CustomItemPosition, CustomStatusItem, PowerlinePlacement, PresetDef, StatusLineLayout, StatusLinePreset, StatusLineSegmentId, StatusLineSegmentOptions, StatusLineSeparatorStyle } from "./types.ts";
+import type { ColorValue, CustomItemPosition, CustomStatusItem, PowerlinePlacement, StatusFormatRule, PresetDef, StatusLineLayout, StatusLinePreset, StatusLineSegmentId, StatusLineSegmentOptions, StatusLineSeparatorStyle } from "./types.ts";
 
 export type CompactPromptMode = "queue" | "native";
 export type SecondaryOverflow = "drop" | "wrap";
@@ -39,6 +39,9 @@ export interface EditorConfig {
 export interface PowerlineConfig {
   preset: StatusLinePreset;
   customItems: CustomStatusItem[];
+  statusFormats: Map<string, StatusFormatRule>;
+  invalidStatusFormats: string[];
+  statusOrder: string[];
   disabledSegments: StatusLineSegmentId[];
   invalidDisabledSegments: string[];
   layout: StatusLineLayout | null;
@@ -422,6 +425,9 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
   const defaultConfig: PowerlineConfig = {
     preset: "default",
     customItems: [],
+    statusFormats: new Map(),
+    invalidStatusFormats: [],
+    statusOrder: [],
     disabledSegments: [],
     invalidDisabledSegments: [],
     layout: null,
@@ -449,12 +455,18 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
   const customItems = normalizeCustomItems(value.customItems);
   const { disabledSegments, invalidDisabledSegments } = normalizeDisabledSegments(value.disabledSegments, customItems);
   const { layout, invalidLayoutSegments } = normalizeLayout(value.layout, customItems);
+  const { statusFormats, invalidStatusFormats } = normalizeStatusFormats(value.statusFormats);
   const { placement, invalidPlacement } = normalizePlacement(value.placement);
   const { secondaryOverflow, invalidSecondaryOverflow } = normalizeSecondaryOverflow(value.secondaryOverflow);
 
   return {
     preset: normalizePreset(value.preset, presets) ?? defaultConfig.preset,
     customItems,
+    statusFormats,
+    invalidStatusFormats,
+    statusOrder: Array.isArray(value.statusOrder)
+      ? value.statusOrder.filter((key): key is string => typeof key === "string" && key.trim() !== "").map((key) => key.trim())
+      : [],
     disabledSegments,
     invalidDisabledSegments,
     layout,
@@ -580,6 +592,66 @@ export function normalizeExtensionStatusValue(value: string, preserveAnsi = fals
     ? value.replace(/(\s|·|[|])+$/, "")
     : value.replace(/(\x1b\[[0-9;]*m|\s|·|[|])+$/, "");
   return visibleWidth(stripped) > 0 ? stripped : null;
+}
+
+const STATUS_FORMAT_FIELDS = new Set(["icon", "hide", "replace", "color", "maxWidth"]);
+
+/** Keys with an invalid or unknown field are listed as `key.field`; the rest of the rule still applies. */
+function normalizeStatusFormats(raw: unknown): { statusFormats: Map<string, StatusFormatRule>; invalidStatusFormats: string[] } {
+  const statusFormats = new Map<string, StatusFormatRule>();
+  const invalidStatusFormats: string[] = [];
+  if (!isRecord(raw)) return { statusFormats, invalidStatusFormats };
+
+  for (const [key, entry] of Object.entries(raw)) {
+    if (!isRecord(entry)) {
+      invalidStatusFormats.push(key);
+      continue;
+    }
+    const rule: StatusFormatRule = {};
+    for (const field of Object.keys(entry)) {
+      if (!STATUS_FORMAT_FIELDS.has(field)) invalidStatusFormats.push(`${key}.${field}`);
+    }
+    if (typeof entry.icon === "string" && entry.icon.trim()) rule.icon = entry.icon.trim();
+    if (entry.hide === true) rule.hide = true;
+    const color = normalizeCustomColor(entry.color);
+    if (color) rule.color = color;
+    if (Number.isInteger(entry.maxWidth) && (entry.maxWidth as number) > 0) rule.maxWidth = entry.maxWidth as number;
+    if (Array.isArray(entry.replace)) {
+      rule.replace = [];
+      for (const pair of entry.replace) {
+        const [pattern, replacement] = Array.isArray(pair) ? pair : [];
+        try {
+          if (typeof pattern !== "string" || typeof replacement !== "string") throw new Error("pair");
+          rule.replace.push([new RegExp(pattern, "gi"), replacement]);
+        } catch {
+          invalidStatusFormats.push(`${key}.replace`);
+        }
+      }
+    }
+    statusFormats.set(key, rule);
+  }
+  return { statusFormats, invalidStatusFormats };
+}
+
+const ANSI_SGR = /\x1b\[[0-9;]*m/g;
+// Leading and trailing separators go, so a `· ` prefix from an extension never survives.
+const EDGE_SEPARATORS = /^[\s·|]+|[\s·|]+$/g;
+
+/**
+ * Applies a status's format rule in order. A status that is empty after its rules is dropped, so an
+ * empty value never leaves a stray separator. Without a rule the status is normalized as before.
+ */
+export function formatExtensionStatus(value: string, rule: StatusFormatRule | undefined): string | null {
+  if (!rule) return normalizeCompactExtensionStatus(value);
+  if (rule.hide) return null;
+
+  let text = value.replace(ANSI_SGR, "");
+  for (const [pattern, replacement] of rule.replace ?? []) text = text.replace(pattern, replacement);
+  text = text.replace(EDGE_SEPARATORS, "");
+  if (!text) return null;
+
+  if (rule.icon) text = `${rule.icon} ${text}`;
+  return rule.maxWidth ? truncateToWidth(text, rule.maxWidth, "…") : text;
 }
 
 export function normalizeCompactExtensionStatus(value: string): string | null {

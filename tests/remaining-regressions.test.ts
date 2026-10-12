@@ -49,6 +49,8 @@ function createSegmentContext(overrides: Partial<SegmentContext> = {}): SegmentC
     git: { branch: null, staged: 0, unstaged: 0, untracked: 0 },
     extensionStatuses: new Map(),
     hiddenExtensionStatusKeys: new Set(),
+    statusFormats: new Map(),
+    statusOrder: [],
     customItemsById: new Map(),
     options: {},
     theme: { fg: plainThemeText },
@@ -243,4 +245,13 @@ test("unknown context estimates are event-scoped and cleared before compaction",
   assert.match(source, /contextApproximate = coreContextUsage\?\.contextTokens === null && approximateContextUsage !== null;/);
   assert.match(source, /pi\.on\("session_before_compact", async \(_event, ctx\) => \{\r?\n\s+powerlineCompacting = true;\r?\n\s+currentCtx = ctx;\r?\n\s+isStreaming = false;\r?\n\s+liveAssistantUsage = null;\r?\n\s+approximateContextUsage = null;\r?\n\s+coreContextUsageCache\.reset\(\);/);
   assert.match(source, /pi\.on\("session_compact", async \(event, ctx\) => \{\r?\n\s+powerlineCompacting = false;\r?\n\s+currentCtx = ctx;\r?\n\s+isStreaming = false;\r?\n\s+liveAssistantUsage = null;\r?\n\s+approximateContextUsage = estimateUnknownContextUsage\(ctx\);\r?\n\s+coreContextUsageCache\.reset\(\);/);
+});
+
+test("tokens segment shows unlabelled input and output and hides when both are zero", () => {
+  const rendered = renderSegment("tokens", createSegmentContext({
+    usageStats: { input: 1500, output: 42, cacheRead: 0, cacheWrite: 0, cost: 0, subagentCost: 0 },
+  }));
+  assert.equal(rendered.content.replace(/\x1b\[[0-9;]*m/g, ""), "↑1.5k ↓42");
+
+  assert.equal(renderSegment("tokens", createSegmentContext()).visible, false);
 });

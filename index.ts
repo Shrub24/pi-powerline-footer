@@ -79,6 +79,9 @@ import type { PowerlineQueueItem, QueueContext, QueueIntent, QueueSummary, Queue
 let config: PowerlineConfig = {
   preset: "default",
   customItems: [],
+  statusFormats: new Map(),
+  invalidStatusFormats: [],
+  statusOrder: [],
   disabledSegments: [],
   invalidDisabledSegments: [],
   layout: null,
@@ -1259,6 +1262,12 @@ function warnInvalidSegmentSettings(ctx: any): void {
 
   if (config.editor.invalidMode !== null) {
     const message = `Ignoring invalid powerline editor mode: ${JSON.stringify(config.editor.invalidMode)}`;
+    console.warn(`[powerline-footer] ${message}`);
+    if (ctx.hasUI) ctx.ui.notify(message, "warning");
+  }
+
+  if (config.invalidStatusFormats.length > 0) {
+    const message = `Ignoring invalid powerline status format fields: ${config.invalidStatusFormats.join(", ")}`;
     console.warn(`[powerline-footer] ${message}`);
     if (ctx.hasUI) ctx.ui.notify(message, "warning");
   }
@@ -3029,6 +3038,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       git: gitStatus,
       extensionStatuses,
       hiddenExtensionStatusKeys,
+      statusFormats: config.statusFormats,
+      statusOrder: config.statusOrder,
       customItemsById,
       frameLabel: (width) => currentFrameLabel?.(width, true),
       options: segmentOptions,

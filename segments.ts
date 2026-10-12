@@ -2,7 +2,7 @@ import { hostname as osHostname } from "node:os";
 import { basename } from "node:path";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { BuiltinStatusLineSegmentId, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId } from "./types.ts";
-import { normalizeCompactExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
+import { formatExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
 import { fg, applyColor } from "./theme.ts";
 import { getIcons, SEP_DOT, getThinkingText } from "./icons.ts";
 import { formatUsdCost } from "./currency-rates.ts";
@@ -297,6 +297,18 @@ const tokenOutSegment: StatusLineSegment = {
   },
 };
 
+// Input and output together, unlabelled: ↑ is what was sent, ↓ what came back.
+const tokensSegment: StatusLineSegment = {
+  id: "tokens",
+  render(ctx) {
+    const { input, output } = ctx.usageStats;
+    if (!input && !output) return { content: "", visible: false };
+
+    const content = `↑${formatTokens(input)} ↓${formatTokens(output)}`;
+    return { content: color(ctx, "tokens", content), visible: true };
+  },
+};
+
 const tokenTotalSegment: StatusLineSegment = {
   id: "token_total",
   render(ctx) {
@@ -486,6 +498,13 @@ const cacheWriteSegment: StatusLineSegment = {
   },
 };
 
+// Listed keys come first in the configured order; unlisted keys keep their publication order after them.
+function orderStatusKeys(keys: Iterable<string>, order: readonly string[]): string[] {
+  const rank = new Map(order.map((key, index) => [key, index]));
+  const unlisted = order.length;
+  return [...keys].sort((a, b) => (rank.get(a) ?? unlisted) - (rank.get(b) ?? unlisted));
+}
+
 const extensionStatusesSegment: StatusLineSegment = {
   id: "extension_statuses",
   render(ctx) {
@@ -497,11 +516,12 @@ const extensionStatusesSegment: StatusLineSegment = {
     // and strings that are only ANSI codes with no visible text.
     // Also skip statuses explicitly elevated into dedicated custom segments.
     const parts: string[] = [];
-    for (const [statusKey, value] of statuses.entries()) {
+    for (const statusKey of orderStatusKeys(statuses.keys(), ctx.statusOrder)) {
       if (ctx.hiddenExtensionStatusKeys.has(statusKey)) continue;
-      const normalized = value ? normalizeCompactExtensionStatus(value) : null;
-      if (normalized) {
-        parts.push(normalized);
+      const rule = ctx.statusFormats.get(statusKey);
+      const text = formatExtensionStatus(statuses.get(statusKey) ?? "", rule);
+      if (text) {
+        parts.push(rule?.color ? applyColor(ctx.theme, rule.color, text) : text);
       }
     }
 
@@ -536,6 +556,7 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   queue: queueSegment,
   token_in: tokenInSegment,
   token_out: tokenOutSegment,
+  tokens: tokensSegment,
   token_total: tokenTotalSegment,
   cost: costSegment,
   context_pct: contextPctSegment,

@@ -33,6 +33,8 @@ function createSegmentContext(thinkingLevel: string, colors: ColorScheme): Segme
     git: { branch: null, staged: 0, unstaged: 0, untracked: 0 },
     extensionStatuses: new Map(),
     hiddenExtensionStatusKeys: new Set(),
+    statusFormats: new Map(),
+    statusOrder: [],
     customItemsById: new Map(),
     options: {},
     theme: {

@@ -51,6 +51,8 @@ function createSegmentContext(options: StatusLineSegmentOptions = {}, overrides:
     git: { branch: null, staged: 0, unstaged: 0, untracked: 0 },
     extensionStatuses: new Map(),
     hiddenExtensionStatusKeys: new Set(),
+    statusFormats: new Map(),
+    statusOrder: [],
     customItemsById: new Map(),
     options,
     theme: plainTheme(),

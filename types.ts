@@ -41,6 +41,7 @@ export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
   "queue",
   "token_in",
   "token_out",
+  "tokens",
   "token_total",
   "cost",
   "context_pct",
@@ -125,6 +126,15 @@ export interface CustomStatusItem {
   prefix?: string;
   hideWhenMissing: boolean;
   excludeFromExtensionStatuses: boolean;
+}
+
+/** How one extension status is restyled in the footer. Patterns are case-insensitive and global. */
+export interface StatusFormatRule {
+  icon?: string;
+  hide?: boolean;
+  replace?: Array<[RegExp, string]>;
+  color?: ColorValue;
+  maxWidth?: number;
 }
 
 // Preset definition
@@ -219,6 +229,8 @@ export interface SegmentContext {
   // Extension statuses
   extensionStatuses: ReadonlyMap<string, string>;
   hiddenExtensionStatusKeys: ReadonlySet<string>;
+  statusFormats: ReadonlyMap<string, StatusFormatRule>;
+  statusOrder: readonly string[];
   customItemsById: ReadonlyMap<string, CustomStatusItem>;
   
   // Options
