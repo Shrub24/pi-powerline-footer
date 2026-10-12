@@ -39,6 +39,8 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 **Shell ghost suggestions** — Optional bash-mode completions can show inline ghost suggestions from successful project shell history, deterministic path and git continuations, guarded global history for high-confidence heads like `git`, and a tiny curated default set. Right now that curated set is `g` → `git status` and `c` → `cd ..`. Shell-native completion probes stay disabled. Set `bashMode.completions` to `true` to enable bash-mode ghosts and one-off `!command` / `!!command` predictions.
 
+**Vim editor** — Set `powerline.editor.mode` to `"vim"` to edit with a modal editor (a vendored [pi-vim](https://github.com/lajarre/pi-vim)) while keeping Powerline's stash, delayed send, autocomplete, and status bar. See [Vim editor](#vim-editor).
+
 ## Installation
 
 ```bash
@@ -394,6 +396,58 @@ After changing bindings, run `/reload`. Invalid bindings fall back to safe defau
 ### Editor autocomplete composition
 
 Powerline wraps Pi's autocomplete provider so bash mode can add shell-aware suggestions. When another editor extension was already installed, powerline now passes Pi's provider through that previous editor's `setAutocompleteProvider()` first and then wraps the resulting provider. This preserves prior autocomplete-provider wrappers where possible, but it is not full render/input composition between custom editors.
+
+## Vim editor
+
+Set `powerline.editor.mode` to `"vim"` to edit with a Vim-style modal editor instead of Powerline's default one. The mode is read at startup: there is no runtime switching and no `/powerline` subcommand for it. Any other value warns once and falls back to the default editor.
+
+```json
+{
+  "powerline": {
+    "editor": { "mode": "vim" }
+  }
+}
+```
+
+The Vim editor is a vendored copy of [pi-vim](https://github.com/lajarre/pi-vim); `vim/UPSTREAM.md` records the snapshot. Both editors receive Powerline's shared behaviour — delayed send, autocomplete composition, stash and clipboard shortcuts, prompt history, compaction interception, and the render frame — so only the editor itself changes. The mode label, including pending counts and the `:` Ex line, is drawn once on the frame's bottom border.
+
+Vim settings live under `powerline.editor.vim`:
+
+```json
+{
+  "powerline": {
+    "editor": {
+      "mode": "vim",
+      "vim": {
+        "clipboardMirror": "all",
+        "exCommand": { "piDispatch": true, "copyInputToClipboard": false },
+        "modeColors": { "insert": "borderMuted", "normal": "borderAccent", "visual": "customMessageLabel", "ex": "warning" }
+      }
+    }
+  }
+}
+```
+
+`clipboardMirror` is `all` (default), `yank`, or `never`. `exCommand.piDispatch` lets `:name` dispatch any Pi command, and `:!cmd` run shell commands. `exCommand.copyInputToClipboard` is read from your user-global settings file only: it writes the prompt to the OS clipboard, so a project settings file cannot enable it. `modeColors` are pi-vim theme tokens for the frame label.
+
+Standalone pi-vim users move their settings from `piVim.*` to `powerline.editor.vim.*`, and remove the `pi-vim` extension so only one modal editor is loaded.
+
+### Vim editor limitations
+
+- `esc` during a pending delayed send puts the held prompt back in the editor instead of reaching Vim, so the mode does not change. `Enter` on an empty editor sends the held prompt immediately.
+- Persistent bash mode is unavailable: `/bash-mode` and its shortcut notify instead of switching. One-off `!command` / `!!command` still run, with completion, but without ghost suggestions.
+- A preset or placement change, and the first-keystroke autocomplete recovery, rebuild the editor: Vim mode, undo history, and registers reset.
+- `:compact` dispatches Pi's `/compact` and skips Powerline's queue-aware compaction interception. Typing `/compact` in the editor uses Powerline's path.
+- `cmd+shift+up` / `cmd+shift+down` are not bound in Vim mode; `gg` and `G` replace them.
+
+### What the Vim editor drops from pi-vim
+
+These pi-vim features are deliberately not wired, so the vendored tree stays an unmodified snapshot:
+
+- mode-coloured border and the sync policies around it (`borderSync`, `labelSync`, the "defer while thinking" behaviour, and the deprecated `syncBorderColorWithMode`). Pi and Powerline already colour the editor border for the thinking level. `modeColors` still colour the frame label.
+- the `modeChange` shell commands and the `pi-vim:mode-change` event.
+- pi-vim's own last-line mode label, replaced by the label on Powerline's frame.
+- shell ghost suggestions in Vim mode (bash-mode ghosts stay available in the default editor).
 
 ## Working Vibes
 
