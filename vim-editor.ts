@@ -5,12 +5,15 @@ import type { EditorBackend, EditorBackendFactory } from "./editor-composition.t
 import type { EditorVimSettings } from "./powerline-config.ts";
 import { ModalEditor } from "./vim/index.ts";
 import { resolveClipboardMirrorPolicy } from "./vim/clipboard-policy.ts";
-import { buildModeColorizers, resolveModeColors } from "./vim/mode-colors.ts";
+import { buildModeColorizers, resolveModeColors, type ModeColorKey } from "./vim/mode-colors.ts";
 import { fitModeLabel } from "./vim/mode-label.ts";
 import { resolveExCommandSettings } from "./vim/settings.ts";
 import { enableCursorShapeSupport, type CursorShapeCleanup } from "./vim/cursor-shape.ts";
 
 const REVERSE_VIDEO = (text: string) => `\x1b[7m${text}\x1b[27m`;
+// Black text on the mode's background: readable on every mode colour the default theme uses.
+const BADGE_FOREGROUND = "\x1b[30m";
+const COLOUR_ESCAPE = /^\x1b\[38;[\d;]*m/;
 
 const CLIPBOARD_WRITE_TOOLS = ["wl-copy", "xclip", "xsel", "pbcopy", "clip", "termux-clipboard-set"];
 
@@ -34,17 +37,36 @@ export function clipboardWriteUnavailable(options: { path?: string; isTTY?: bool
  * `vendorSeamMembers` is asserted by a test, so a vendored rename fails loudly instead of quietly
  * dropping a feature.
  */
-const VENDOR_SEAM_MEMBERS = ["getModeLabel", "getModeLabelColorizer", "syncCursorShapeForRender", "commandNamesFn"] as const;
+const VENDOR_SEAM_MEMBERS = ["getModeLabel", "getModeLabelColorizer", "getActiveMode", "syncCursorShapeForRender", "commandNamesFn"] as const;
 
 type VendorInternals = {
   getModeLabel(): string;
   getModeLabelColorizer(): ((text: string) => string) | null;
+  getActiveMode(): ModeColorKey;
   syncCursorShapeForRender(lines: string[]): void;
   commandNamesFn(): ReadonlySet<string>;
 };
 
 export function vendorSeamMembers(): readonly string[] {
   return VENDOR_SEAM_MEMBERS;
+}
+
+/**
+ * The rounded frame's label: the mode's `modeColors` token as the background. The background is the
+ * token's theme foreground colour escape with 38 turned into 48, so it follows the Pi theme. Pi's
+ * bundled theme can resolve a token to the terminal default (no colour escape, only a dim attribute);
+ * there is no colour to paint, so the label is reverse video, which shows the default foreground as a
+ * block. An unknown token takes the same path.
+ */
+export function modeBadge(text: string, mode: ModeColorKey, colors: Record<ModeColorKey, string>, theme: { getFgAnsi(token: string): string }): string {
+  let colour: string | undefined;
+  try {
+    colour = theme.getFgAnsi(colors[mode].trim()).match(COLOUR_ESCAPE)?.[0];
+  } catch {
+    colour = undefined;
+  }
+  if (!colour) return `\x1b[7m${text}\x1b[27m`;
+  return `${colour.replace("\x1b[38;", "\x1b[48;")}${BADGE_FOREGROUND}${text}\x1b[39m\x1b[49m`;
 }
 
 function vendorInternals(editor: ModalEditor): VendorInternals {
@@ -111,7 +133,8 @@ export function createVimRuntime(options: {
   }
 
   const theme = ctx.ui.theme;
-  const labelColorizers = theme ? buildModeColorizers(theme, resolveModeColors(settings.modeColors), REVERSE_VIDEO) : null;
+  const modeColors = resolveModeColors(settings.modeColors);
+  const labelColorizers = theme ? buildModeColorizers(theme, modeColors, REVERSE_VIDEO) : null;
 
   // Session-scoped: the first Vim editor installs the cursor-shape support, later rebuilds reuse it
   // so they never overwrite its record of the original terminal state.
@@ -148,8 +171,9 @@ export function createVimRuntime(options: {
       editor,
       // The fast renderer bypasses render(), which would skip the frame label and the cursor shape.
       fastRender: false,
-      getFrameLabel: (width) => {
+      getFrameLabel: (width, badge = false) => {
         const rawLabel = fitModeLabel(internals.getModeLabel(), width);
+        if (badge) return modeBadge(rawLabel, internals.getActiveMode(), modeColors, theme);
         const colorize = internals.getModeLabelColorizer();
         return colorize ? colorize(rawLabel) : rawLabel;
       },

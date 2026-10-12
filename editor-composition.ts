@@ -11,7 +11,7 @@ export interface EditorBackend {
    */
   fastRender: boolean;
   /** Optional label for the frame's bottom border, fitted to the width it is handed. */
-  getFrameLabel?: (width: number) => string | undefined;
+  getFrameLabel?: (width: number, badge?: boolean) => string | undefined;
 }
 
 export type EditorBackendFactory = (tui: any, editorTheme: any, keybindings: any) => EditorBackend;

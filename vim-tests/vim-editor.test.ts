@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { visibleWidth, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import type { EditorFactory } from "../editor-composition.ts";
-import { vendorSeamMembers } from "../vim-editor.ts";
+import { modeBadge, vendorSeamMembers } from "../vim-editor.ts";
 import { ModalEditor } from "../vim/index.ts";
 import { stubKeybindings, stubTheme, stubTui, sendKeys } from "../vim/test/harness.ts";
 
@@ -74,6 +74,7 @@ async function vimHarness(
       return (text: string) => `${borderColorEscape}${text}\x1b[49m`;
     },
     fg: (token: string, text: string) => `${modeColorEscape(token)}${text}\x1b[39m`,
+    getFgAnsi: (token: string) => modeColorEscape(token),
     bold: (text: string) => text,
   };
 
@@ -297,7 +298,10 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
   const editor = h.currentEditor();
   const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
 
-  const insertFrame = plain(h.render());
+  const rawInsertFrame = h.render();
+  // The label cell's background is the insert token (borderMuted → code 1), not the border rule's.
+  assert.match(rawInsertFrame.at(-1)!, /\x1b\[48;5;1m\x1b\[30m INSERT /, "the label is a background block in the mode colour");
+  const insertFrame = plain(rawInsertFrame);
   assert.equal(insertFrame.length, 3, "top rule, one body row and bottom rule");
   assert.ok(insertFrame[0]!.startsWith("\u256d") && insertFrame[0]!.endsWith("\u256e"));
   assert.match(insertFrame[0]!, /Test model/);
@@ -308,9 +312,19 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
 
   // The label is read at paint time, so a mode switch shows without any layout change.
   sendKeys(editor, ["\x1b"]);
-  const normalFrame = plain(h.render());
+  const rawNormalFrame = h.render();
+  assert.match(rawNormalFrame.at(-1)!, /\x1b\[48;5;2m\x1b\[30m NORMAL /, "the normal label takes the borderAccent background");
+  const normalFrame = plain(rawNormalFrame);
   assert.match(normalFrame.at(-1)!, / NORMAL /);
   assert.doesNotMatch(normalFrame.at(-1)!, / INSERT /);
+});
+
+test("a mode token with no colour escape gets a reverse-video label, never a bare dim attribute", () => {
+  const colors = { insert: "borderMuted", normal: "borderAccent", visual: "customMessageLabel", ex: "warning" };
+  // Pi's bundled theme resolves borderMuted to the terminal default: only a dim attribute.
+  const dimOnly = { getFgAnsi: (token: string) => (token === "borderMuted" ? "\x1b[2m" : "\x1b[38;5;2m") };
+  assert.equal(modeBadge(" INSERT ", "insert", colors, dimOnly), "\x1b[7m INSERT \x1b[27m");
+  assert.equal(modeBadge(" NORMAL ", "normal", colors, dimOnly), "\x1b[48;5;2m\x1b[30m NORMAL \x1b[39m\x1b[49m");
 });
 
 test("the Vim backend leaves the frame border in Pi's colour", async (t) => {

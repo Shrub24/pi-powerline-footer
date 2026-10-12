@@ -63,7 +63,8 @@ test("session segment shows the current display name when available", () => {
     sessionName: "My working session",
   }));
 
-  assert.equal(stripAnsi(rendered.content).endsWith("My working session"), true);
+  // Names longer than 16 columns are cut with an ellipsis.
+  assert.equal(stripAnsi(rendered.content).endsWith("My working sess\u2026"), true);
   assert.equal(rendered.content.includes("12345678"), false);
   assert.equal(rendered.visible, true);
 });

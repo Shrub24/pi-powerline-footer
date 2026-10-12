@@ -1309,7 +1309,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let stashedEditorText: string | null = null;
   let stashedPromptHistory: string[] = readPersistedStashHistory();
   let currentEditor: any = null;
-  let currentFrameLabel: ((width: number) => string | undefined) | undefined;
+  let currentFrameLabel: ((width: number, badge?: boolean) => string | undefined) | undefined;
   let bashModeActive = false;
   // Vim mode only: resolved once per session, because loading the vendored tree is the one part of
   // the editor setup that cannot happen synchronously.
@@ -3030,7 +3030,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       extensionStatuses,
       hiddenExtensionStatusKeys,
       customItemsById,
-      frameLabel: (width) => currentFrameLabel?.(width),
+      frameLabel: (width) => currentFrameLabel?.(width, true),
       options: segmentOptions,
       theme,
       colors,

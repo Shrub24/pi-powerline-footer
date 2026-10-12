@@ -1,6 +1,6 @@
 import { hostname as osHostname } from "node:os";
 import { basename } from "node:path";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { BuiltinStatusLineSegmentId, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId } from "./types.ts";
 import { normalizeCompactExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
 import { fg, applyColor } from "./theme.ts";
@@ -427,12 +427,15 @@ const timeSegment: StatusLineSegment = {
   },
 };
 
+const SESSION_NAME_MAX_WIDTH = 16;
+
 const sessionSegment: StatusLineSegment = {
   id: "session",
   render(ctx) {
     const icons = getIcons();
     const sessionId = ctx.sessionId;
-    const display = ctx.sessionName?.trim() ? ctx.sessionName : sessionId?.slice(0, 8) || "new";
+    const name = ctx.sessionName?.trim() ? ctx.sessionName : sessionId?.slice(0, 8) || "new";
+    const display = truncateToWidth(name, SESSION_NAME_MAX_WIDTH, "…");
 
     return { content: withIcon(icons.session, display), visible: true };
   },
