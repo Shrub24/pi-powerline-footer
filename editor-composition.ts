@@ -1,6 +1,31 @@
-import type { AutocompleteProvider } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, type AutocompleteProvider } from "@earendil-works/pi-tui";
 
 export type EditorFactory = (tui: any, editorTheme: any, keybindings: any) => any;
+
+export interface EditorBackend {
+  /** The editor the shared Powerline behaviour wraps. */
+  editor: any;
+  /**
+   * Whether the fast renderer may replace the framed render. It bypasses `render()`, so a backend
+   * that supplies a frame label has to keep this false or the label is lost.
+   */
+  fastRender: boolean;
+  /** Optional label for the frame's bottom border, fitted to the width it is handed. */
+  getFrameLabel?: (width: number) => string | undefined;
+}
+
+export type EditorBackendFactory = (tui: any, editorTheme: any, keybindings: any) => EditorBackend;
+
+/** A frame border line: a full-width rule, or one carrying the backend's label at its right end. */
+export function renderFrameBorder(width: number, colorBorder: (text: string) => string, label?: string): string {
+  const innerWidth = Math.max(0, width - 2);
+  if (!label) {
+    return ` ${colorBorder("─".repeat(innerWidth))}`;
+  }
+
+  const fitted = truncateToWidth(label, innerWidth, "");
+  return ` ${colorBorder("─".repeat(Math.max(0, innerWidth - visibleWidth(fitted))))}${fitted}`;
+}
 
 const POWERLINE_EDITOR_FACTORY = Symbol.for("pi-powerline-footer.editorFactory");
 

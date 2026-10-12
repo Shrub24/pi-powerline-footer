@@ -20,6 +20,7 @@ async function editorHarness(t: test.TestContext, settings: Record<string, unkno
     new URL("../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js", import.meta.url).href
   );
   const keybindings = KeybindingsManager.create();
+  const theme = { borderColor: (text: string) => text };
   const tui = { requestRender() {}, terminal: { columns: 80, rows: 24 }, hasOverlay: () => false };
 
   const foreignEditors: ForeignEditor[] = [];
@@ -46,7 +47,7 @@ async function editorHarness(t: test.TestContext, settings: Record<string, unkno
         }
         installedFactory = factory;
         // Pi constructs an editor from the factory it has just been handed.
-        editor = factory(tui, {}, keybindings);
+        editor = factory(tui, theme, keybindings);
         editors.push(editor);
       },
       getEditorComponent: () => installedFactory,
@@ -99,6 +100,10 @@ test("successive editor rebuilds construct one foreign editor per Pi constructio
     assert.equal(typeof editor.render, "function");
     assert.equal(h.foreignEditors.includes(editor as unknown as ForeignEditor), false);
   }
+
+  // The default backend supplies no frame label, so the frame keeps its plain border.
+  const frame = h.editor().render(60).map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+  assert.equal(frame.at(-1), ` ${"─".repeat(58)}`);
 });
 
 test("Pi installing a provider after Powerline wrapped re-wraps the new provider", async (t) => {

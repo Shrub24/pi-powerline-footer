@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { AutocompleteProvider } from "@earendil-works/pi-tui";
+import { visibleWidth, type AutocompleteProvider } from "@earendil-works/pi-tui";
 import {
   createEditorFactoryTracker,
   getEditorAutocompleteProvider,
   isPowerlineEditorFactory,
   passAutocompleteProviderThroughPreviousEditor,
+  renderFrameBorder,
   type EditorFactory,
 } from "../editor-composition.ts";
 
@@ -84,6 +85,25 @@ test("editor rebuilds build on the foreign factory instead of nesting Powerline 
   assert.equal(powerlineEditors.length, 3);
   assert.equal(foreignEditors.length, 3);
   assert.deepEqual(powerlineEditors.map((editor) => editor.previous), foreignEditors);
+});
+
+test("the frame border carries a backend label inside the frame without changing its width", () => {
+  const colorBorder = (text: string) => `\x1b[2m${text}\x1b[0m`;
+  const strip = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
+
+  // The default backend has no label: a plain rule, exactly as before.
+  const plain = renderFrameBorder(40, colorBorder);
+  assert.equal(plain, ` ${colorBorder("─".repeat(38))}`);
+  assert.equal(visibleWidth(plain), 39);
+
+  const labelled = renderFrameBorder(40, colorBorder, "\x1b[36m NORMAL \x1b[0m");
+  assert.equal(strip(labelled), ` ${"─".repeat(30)} NORMAL `);
+  assert.equal(visibleWidth(labelled), 39);
+
+  // A label wider than the border is clipped so the frame keeps its width.
+  const clipped = renderFrameBorder(20, colorBorder, "x".repeat(50));
+  assert.equal(strip(clipped), ` ${"x".repeat(18)}`);
+  assert.equal(visibleWidth(clipped), 19);
 });
 
 test("a Powerline factory installed before a reload is recognised and never adopted", () => {

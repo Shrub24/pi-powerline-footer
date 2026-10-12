@@ -34,7 +34,7 @@ import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
 import { ansi, getFgAnsiCode } from "./colors.ts";
 import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
-import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor } from "./editor-composition.ts";
+import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor, renderFrameBorder, type EditorBackendFactory } from "./editor-composition.ts";
 import { EditorPerfProfiler, readEditorPerfOptions } from "./editor-performance.ts";
 import { CoreContextUsageCache, estimateInitialContextTokens, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
 import { isStaleExtensionContextError, shouldShowStartupWelcome } from "./lifecycle.ts";
@@ -3252,8 +3252,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       typeof ctx.ui.getEditorComponent === "function" ? ctx.ui.getEditorComponent() : undefined,
     );
 
-    const editorFactory = editorFactoryTracker.own((tui: any, editorTheme: any, keybindings: any) => {
-      const previousEditor = previousEditorFactory?.(tui, editorTheme, keybindings);
+    // The default backend: Powerline's bash-mode editor, with no frame label of its own.
+    const createBackend: EditorBackendFactory = (tui, editorTheme, keybindings) => {
       const editor = new BashModeEditor(tui, editorTheme, keybindings, {
         keybindings,
         isBashModeActive: () => bashModeActive,
@@ -3288,6 +3288,13 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           return bashCompletionEngine.getGhostSuggestion(text, getShellCwd(), getShellPath(), signal);
         },
       });
+
+      return { editor, fastRender: editorPerf.options.fastRender };
+    };
+
+    const editorFactory = editorFactoryTracker.own((tui: any, editorTheme: any, keybindings: any) => {
+      const previousEditor = previousEditorFactory?.(tui, editorTheme, keybindings);
+      const { editor, fastRender, getFrameLabel } = createBackend(tui, editorTheme, keybindings);
 
       let installingPowerlineAutocompleteProvider = false;
       let powerlineAutocompleteProviderInstalled = false;
@@ -3454,7 +3461,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
               : originalRender(width);
           }
 
-          if (editorPerf.options.fastRender) {
+          if (fastRender) {
             const fastLines = editorPerf.options.enabled
               ? editorPerf.measure("editor.render.fast-probe", () => renderFastPowerlineEditor(editor, width, {
                   bashModeActive,
@@ -3497,8 +3504,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             }
           }
 
+          const colorBorder = (text: string) => colorEditorBorder(editor, text);
           const result: string[] = [];
-          result.push(" " + colorEditorBorder(editor, "─".repeat(width - 2)));
+          result.push(renderFrameBorder(width, colorBorder));
 
           for (let i = 1; i < bottomBorderIndex; i++) {
             const prefix = i === 1 ? promptPrefix : contPrefix;
@@ -3509,7 +3517,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             result.push(`${promptPrefix}${" ".repeat(contentWidth)}`);
           }
 
-          result.push(" " + colorEditorBorder(editor, "─".repeat(width - 2)));
+          result.push(renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));
 
           for (let i = bottomBorderIndex + 1; i < lines.length; i++) {
             result.push(lines[i] || "");
