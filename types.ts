@@ -123,8 +123,8 @@ export interface StatusLineLayout {
   left?: StatusLineSegmentId[];
   right?: StatusLineSegmentId[];
   secondary?: StatusLineSegmentId[];
-  /** Rounded frame only: segments on the footer line under the frame, before the extension statuses. */
-  footer?: StatusLineSegmentId[];
+  /** Rounded frame only: footer pills under the frame, before the extension statuses. A group renders as one pill. */
+  footer?: StatusLineSegmentId[][];
 }
 
 export interface CustomStatusItem {
@@ -244,8 +244,8 @@ export interface SegmentContext {
   
   /** The latest completed request's generation speed; absent until one completes. */
   speed?: SpeedSample;
-  /** The running or last finished tool; absent until a tool has run. */
-  tool?: ToolActivity;
+  /** The running or last finished tool, or idle before any has run. */
+  tool: ToolActivity;
 
   // Extension statuses
   extensionStatuses: ReadonlyMap<string, string>;
@@ -266,6 +266,8 @@ export interface SegmentContext {
 export interface RenderedSegment {
   content: string;
   visible: boolean;
+  /** The pill colour when the segment has a state colour, such as the tool segment's. */
+  color?: ColorValue;
 }
 
 // Segment definition

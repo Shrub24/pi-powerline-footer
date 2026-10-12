@@ -3,7 +3,7 @@ import { basename } from "node:path";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { BuiltinStatusLineSegmentId, ColorValue, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId, ThemeLike } from "./types.ts";
 import { boldText } from "./colors.ts";
-import { joinStatuses } from "./footer-statuses.ts";
+import { joinStatuses, type StatusBlock } from "./footer-statuses.ts";
 import { speedText } from "./speed.ts";
 import { formatExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
 import { fg, applyColor } from "./theme.ts";
@@ -305,18 +305,19 @@ const nixSegment: StatusLineSegment = {
   },
 };
 
-// The running tool, or the last one that finished: its state is coloured like the git segment's markers.
-const TOOL_STATE_TOKEN = { running: "warning", done: "success", failed: "error" } as const;
+// The tool state, always shown: the running tool, else the last one that finished, else idle. Its colour
+// is the pill colour in the footer; the text carries the same colour elsewhere.
+const TOOL_STATE_TOKEN = { idle: "muted", running: "warning", done: "success", failed: "error" } as const;
 
 const toolSegment: StatusLineSegment = {
   id: "tool",
   render(ctx) {
-    const activity = ctx.tool;
-    if (!activity) return { content: "", visible: false };
     const icons = getIcons();
-    const icon = { running: icons.toolRunning, done: icons.toolDone, failed: icons.toolFailed }[activity.state];
-    const more = activity.others > 0 ? ` +${activity.others}` : "";
-    return { content: applyColor(ctx.theme, TOOL_STATE_TOKEN[activity.state], `${icon} ${activity.name}${more}`), visible: true };
+    const activity = ctx.tool;
+    const token = TOOL_STATE_TOKEN[activity.state];
+    const icon = { idle: icons.toolIdle, running: icons.toolRunning, done: icons.toolDone, failed: icons.toolFailed }[activity.state];
+    const label = activity.state === "idle" ? "idle" : `${activity.name}${activity.others > 0 ? ` +${activity.others}` : ""}`;
+    return { content: applyColor(ctx.theme, token, [icon, label].filter(Boolean).join(" ")), visible: true, color: token };
   },
 };
 
@@ -365,22 +366,21 @@ const costSegment: StatusLineSegment = {
       return { content: "", visible: false };
     }
 
+    // Where the icon set has a cost icon it takes the place of a leading dollar sign; other symbols stay.
+    const icon = getIcons().cost;
+    const shown = (text: string) => ({
+      content: color(ctx, "cost", withIcon(icon, icon ? text.replace(/^\$/, "") : text)),
+      visible: true,
+    });
     const reportedCost = cost > 0 ? formatUsdCost(cost, ctx.options.cost?.currency) : null;
     if (!usingSubscription) {
-      return reportedCost
-        ? { content: color(ctx, "cost", reportedCost), visible: true }
-        : { content: "", visible: false };
+      return reportedCost ? shown(reportedCost) : { content: "", visible: false };
     }
 
     const subscriptionDisplay = ctx.options.cost?.subscriptionDisplay ?? "subscription";
-    if (subscriptionDisplay === "reported-cost" && reportedCost) {
-      return { content: color(ctx, "cost", reportedCost), visible: true };
-    }
-    if (subscriptionDisplay === "both" && reportedCost) {
-      return { content: color(ctx, "cost", `${reportedCost} (sub)`), visible: true };
-    }
-
-    return { content: color(ctx, "cost", "(sub)"), visible: true };
+    if (subscriptionDisplay === "reported-cost" && reportedCost) return shown(reportedCost);
+    if (subscriptionDisplay === "both" && reportedCost) return shown(`${reportedCost} (sub)`);
+    return shown("(sub)");
   },
 };
 
@@ -671,4 +671,17 @@ export function renderSegment(id: StatusLineSegmentId, ctx: SegmentContext): Ren
     return { content: "", visible: false };
   }
   return segment.render(ctx);
+}
+
+/**
+ * One footer pill for a layout group: its visible segments joined by a thin separator, coloured by the
+ * first segment that sets a colour. Undefined when nothing in the group shows.
+ */
+export function footerGroupItem(group: readonly StatusLineSegmentId[], ctx: SegmentContext): StatusBlock | undefined {
+  const shown = group.map((id) => renderSegment(id, ctx)).filter((rendered) => rendered.visible && rendered.content);
+  if (shown.length === 0) return undefined;
+  return {
+    text: shown.map((rendered) => rendered.content).join(SEP_DOT),
+    color: shown.find((rendered) => rendered.color)?.color,
+  };
 }

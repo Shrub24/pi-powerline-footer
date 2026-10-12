@@ -42,7 +42,7 @@ export interface PowerlineConfig {
   statusFormats: Map<string, StatusFormatRule>;
   invalidStatusFormats: string[];
   statusOrder: string[];
-  statusStyle: "plain" | "blocks";
+  statusStyle: "plain" | "blocks" | "pills";
   disabledSegments: StatusLineSegmentId[];
   invalidDisabledSegments: string[];
   layout: StatusLineLayout | null;
@@ -242,27 +242,36 @@ function normalizeLayout(
   const customItemIds = new Set(customItems.map((item) => item.id));
   const globallyPlaced = new Set<StatusLineSegmentId>();
 
-  for (const row of ["left", "right", "secondary", "footer"] as const) {
+  const place = (row: string, entry: unknown, seen: Set<StatusLineSegmentId>): StatusLineSegmentId | undefined => {
+    const segmentId = normalizeStatusLineSegmentId(entry, customItemIds);
+    if (!segmentId) {
+      invalidLayoutSegments.push(`${row}:${typeof entry === "string" ? entry.trim() : String(entry)}`);
+      return undefined;
+    }
+    if (seen.has(segmentId)) return undefined;
+    seen.add(segmentId);
+    if (globallyPlaced.has(segmentId)) {
+      invalidLayoutSegments.push(`${row}:${segmentId}`);
+      return undefined;
+    }
+    globallyPlaced.add(segmentId);
+    return segmentId;
+  };
+
+  for (const row of ["left", "right", "secondary"] as const) {
     const entries = raw[row];
     if (!Array.isArray(entries)) continue;
-
-    const segments: StatusLineSegmentId[] = [];
     const seen = new Set<StatusLineSegmentId>();
-    for (const entry of entries) {
-      const segmentId = normalizeStatusLineSegmentId(entry, customItemIds);
-      if (!segmentId) {
-        invalidLayoutSegments.push(`${row}:${typeof entry === "string" ? entry.trim() : String(entry)}`);
-      } else if (!seen.has(segmentId)) {
-        seen.add(segmentId);
-        if (globallyPlaced.has(segmentId)) {
-          invalidLayoutSegments.push(`${row}:${segmentId}`);
-        } else {
-          globallyPlaced.add(segmentId);
-          segments.push(segmentId);
-        }
-      }
-    }
-    layout[row] = segments;
+    layout[row] = entries.flatMap((entry) => place(row, entry, seen) ?? []);
+  }
+
+  // A footer entry is one segment or an array of them; an array is a group that renders as one pill.
+  if (Array.isArray(raw.footer)) {
+    const seen = new Set<StatusLineSegmentId>();
+    layout.footer = raw.footer.flatMap((entry) => {
+      const group = (Array.isArray(entry) ? entry : [entry]).flatMap((member) => place("footer", member, seen) ?? []);
+      return group.length > 0 ? [group] : [];
+    });
   }
 
   return Object.keys(layout).length > 0
@@ -476,7 +485,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     customItems,
     statusFormats,
     invalidStatusFormats,
-    statusStyle: value.statusStyle === "blocks" ? "blocks" : "plain",
+    statusStyle: value.statusStyle === "blocks" || value.statusStyle === "pills" ? value.statusStyle : "plain",
     statusOrder: Array.isArray(value.statusOrder)
       ? value.statusOrder.filter((key): key is string => typeof key === "string" && key.trim() !== "").map((key) => key.trim())
       : [],
@@ -515,14 +524,14 @@ export function mergeSegmentsWithCustomItems(
   leftSegments: StatusLineSegmentId[];
   rightSegments: StatusLineSegmentId[];
   secondarySegments: StatusLineSegmentId[];
-  footerSegments: StatusLineSegmentId[];
+  footerSegments: StatusLineSegmentId[][];
 } {
   const layout = options.layout ?? null;
   const explicitlyPlaced = new Set([
     ...(layout?.left ?? []),
     ...(layout?.right ?? []),
     ...(layout?.secondary ?? []),
-    ...(layout?.footer ?? []),
+    ...(layout?.footer ?? []).flat(),
   ]);
   const disabled = new Set(options.disabledSegments ?? []);
 
@@ -551,7 +560,9 @@ export function mergeSegmentsWithCustomItems(
     leftSegments: buildRow("left", layout?.left, presetDef.leftSegments),
     rightSegments: buildRow("right", layout?.right, presetDef.rightSegments),
     secondarySegments: buildRow("secondary", layout?.secondary, presetDef.secondarySegments ?? []),
-    footerSegments: (layout?.footer ?? []).filter((id) => !disabled.has(id)),
+    footerSegments: (layout?.footer ?? [])
+      .map((group) => group.filter((id) => !disabled.has(id)))
+      .filter((group) => group.length > 0),
   };
 }
 

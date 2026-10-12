@@ -29,8 +29,9 @@ import { getPreset, PRESETS } from "./presets.ts";
 import { getAgentPath } from "./paths.ts";
 import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentOptions, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
 import { getSeparator } from "./separators.ts";
-import { extensionStatusParts, renderSegment } from "./segments.ts";
+import { extensionStatusParts, footerGroupItem, renderSegment } from "./segments.ts";
 import { renderFooterRows } from "./footer-statuses.ts";
+import { getIcons } from "./icons.ts";
 import { resolveThinkingLevelSelection } from "./thinking-level.ts";
 import { getGitStatus, invalidateGitStatus, invalidateGitBranch, subscribeGitUpdates } from "./git-status.ts";
 import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
@@ -1129,7 +1130,7 @@ function buildContentFromParts(
  * The rounded frame's segment groups. `ctx` is kept so the Vim label is rendered at paint time: it
  * changes with every mode switch, which the layout cache would otherwise serve stale.
  */
-type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[]; footer: StatusLineSegmentId[] };
+type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[]; footer: StatusLineSegmentId[][] };
 
 type ResponsiveLayout = { topContent: string; secondaryLines: string[]; frame?: FrameLayout };
 
@@ -1142,7 +1143,7 @@ function renderSegmentContents(ids: StatusLineSegmentId[], ctx: SegmentContext):
 
 function computeRoundedFrameLayout(
   ctx: SegmentContext,
-  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[]; footerSegments: StatusLineSegmentId[] },
+  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[]; footerSegments: StatusLineSegmentId[][] },
 ): FrameLayout {
   // Top and bottom segments are bold so they stay legible on the border.
   return {
@@ -3116,7 +3117,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       ...mergedSegments.leftSegments,
       ...mergedSegments.rightSegments,
       ...mergedSegments.secondarySegments,
-      ...mergedSegments.footerSegments,
+      ...mergedSegments.footerSegments.flat(),
     ];
     let segmentCtx: SegmentContext;
     try {
@@ -3178,13 +3179,15 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     if (config.editor.frame === "rounded") {
       const frame = getResponsiveLayout(width, theme).frame;
       if (!frame) return [];
-      return renderFooterRows(
-        { segments: renderSegmentContents(frame.footer, frame.ctx), statuses: extensionStatusParts(frame.ctx) },
-        width,
-        theme,
-        config.statusStyle,
-        getSeparator("powerline").left,
-      );
+      const icons = getIcons();
+      const items = [
+        ...frame.footer.flatMap((group) => footerGroupItem(group, frame.ctx) ?? []),
+        ...extensionStatusParts(frame.ctx),
+      ];
+      return renderFooterRows(items, width, theme, config.statusStyle, {
+        separator: getSeparator("powerline").left,
+        cap: { left: icons.capLeft, right: icons.capRight },
+      });
     }
 
     return [...getResponsiveLayout(width, theme).secondaryLines];

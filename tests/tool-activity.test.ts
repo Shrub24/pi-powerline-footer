@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ToolActivityTracker } from "../tool-activity.ts";
 
-test("nothing shows before a tool has run, and reset hides it again", () => {
+test("the tool state is idle before any tool has run, and reset returns it to idle", () => {
   const tracker = new ToolActivityTracker();
-  assert.equal(tracker.activity, undefined);
+  assert.deepEqual(tracker.activity, { state: "idle" });
   tracker.start("1", "bash");
   tracker.reset();
-  assert.equal(tracker.activity, undefined);
+  assert.deepEqual(tracker.activity, { state: "idle" });
 });
 
 test("a running tool shows as running, and parallel tools show the latest with a count of the others", () => {

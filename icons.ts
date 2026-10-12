@@ -20,6 +20,9 @@ export interface IconSet {
   toolRunning: string;
   toolDone: string;
   toolFailed: string;
+  toolIdle: string;
+  capLeft: string;
+  capRight: string;
   input: string;
   output: string;
   host: string;
@@ -78,6 +81,9 @@ export const NERD_ICONS: IconSet = {
   toolRunning: "\u{F042E}",
   toolDone: "\uF00C",     // nf-fa-check
   toolFailed: "\uF00D",   // nf-fa-times
+  toolIdle: "\u{F04B2}",  // nf-md-sleep
+  capLeft: "\uE0B6",      // round cap, left edge of a footer pill
+  capRight: "\uE0B4",     // round cap, right edge of a footer pill
   input: "\uF090",      // nf-fa-sign_in (input arrow)
   output: "\uF08B",     // nf-fa-sign_out (output arrow)
   host: "\uF109",       // nf-fa-laptop (host)
@@ -98,7 +104,7 @@ export const ASCII_ICONS: IconSet = {
   bitbucket: "⎇",
   tokens: "⊛",
   context: "◫",
-  cost: "$",
+  cost: "",
   time: "◷",
   agents: "AG",
   cache: "cache",
@@ -107,6 +113,9 @@ export const ASCII_ICONS: IconSet = {
   toolRunning: "*",
   toolDone: "ok",
   toolFailed: "x",
+  toolIdle: "",
+  capLeft: "(",
+  capRight: ")",
   input: "in:",
   output: "out:",
   host: "host",
