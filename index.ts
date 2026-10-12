@@ -3290,6 +3290,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       });
 
       let installingPowerlineAutocompleteProvider = false;
+      let powerlineAutocompleteProviderInstalled = false;
       // Pi assigns onSubmit after this factory returns and calls it from every submit path, so the delay wraps it here.
       let piSubmit: ((text: string) => unknown) | undefined;
       Object.defineProperty(editor, "onSubmit", {
@@ -3310,6 +3311,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           return;
         }
 
+        // Pi is installing a provider of its own: drop the stale wrapper so attach wraps this one.
+        powerlineAutocompleteProviderInstalled = false;
         originalSetAutocompleteProvider(passAutocompleteProviderThroughPreviousEditor(provider, previousEditor));
         attachAutocompleteProvider();
       };
@@ -3320,7 +3323,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
       const attachAutocompleteProvider = (): boolean => {
         if (!bashModeSettings.completions) return false;
-        if (editor.hasWrappedProvider()) return true;
+        if (powerlineAutocompleteProviderInstalled) return true;
         const defaultProvider = getInstalledAutocompleteProvider();
         if (!defaultProvider) return false;
 
@@ -3328,12 +3331,13 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         const oneOffBashProvider = new OneOffBashAutocompleteProvider();
         installingPowerlineAutocompleteProvider = true;
         try {
-          editor.installAutocompleteProvider(
+          editor.setAutocompleteProvider(
             new ModeAwareAutocompleteProvider(defaultProvider, bashProvider, oneOffBashProvider, () => bashModeActive),
           );
         } finally {
           installingPowerlineAutocompleteProvider = false;
         }
+        powerlineAutocompleteProviderInstalled = true;
         return true;
       };
 

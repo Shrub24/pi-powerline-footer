@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { isKeyRelease, matchesKey, visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
-import type { AutocompleteProvider } from "@earendil-works/pi-tui";
 import { matchesConfiguredShortcut } from "../shortcuts.ts";
 import type { GhostSuggestion } from "./types.ts";
 
@@ -107,7 +106,6 @@ function resetShellHistoryBrowse(state: object): void {
 export class BashModeEditor extends CustomEditor {
   private readonly keybindingsRef: KeybindingsManager;
   private readonly optionsRef: BashModeEditorOptions;
-  private wrappedProviderInstalled = false;
   private shellHistoryIndex = -1;
   private shellHistoryItems: string[] = [];
   private shellHistoryDraft = "";
@@ -125,20 +123,6 @@ export class BashModeEditor extends CustomEditor {
     super(tui, theme, keybindings);
     this.keybindingsRef = keybindings;
     this.optionsRef = options;
-  }
-
-  setAutocompleteProvider(provider: AutocompleteProvider): void {
-    super.setAutocompleteProvider(provider);
-    this.wrappedProviderInstalled = false;
-  }
-
-  installAutocompleteProvider(provider: AutocompleteProvider): void {
-    this.setAutocompleteProvider(provider);
-    this.wrappedProviderInstalled = true;
-  }
-
-  hasWrappedProvider(): boolean {
-    return this.wrappedProviderInstalled;
   }
 
   getGhostSuggestion(): GhostSuggestion | null {
