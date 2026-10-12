@@ -32,9 +32,10 @@ function backgroundFor(theme: Painter, index: number, color: string | undefined)
 const foregroundOf = (background: string): string => background.replace("\x1b[48;", "\x1b[38;");
 
 /**
- * Renders status blocks as powerline sections: each ` text ` on its own background with dark text,
- * joined by the separator glyph and closed by a cap. Trailing blocks are dropped whole to fit `width`.
- * Returns "" when nothing fits.
+ * Renders status blocks as powerline sections: each `  text  ` on its own background with dark text,
+ * with a space either side of the separator glyph (drawn in the previous block's colour on the default
+ * background) and closed by a cap. Trailing blocks are dropped whole to fit `width`. Returns "" when
+ * nothing fits.
  */
 export function renderStatusBlocks(blocks: StatusBlock[], width: number, theme: Painter, glyph: string): string {
   const painted: Array<{ text: string; background: string }> = [];
@@ -42,9 +43,9 @@ export function renderStatusBlocks(blocks: StatusBlock[], width: number, theme: 
   for (const [index, block] of blocks.entries()) {
     const background = backgroundFor(theme, index, block.color);
     if (!background) continue;
-    const text = truncateToWidth(block.text.replace(SGR, ""), Math.max(1, width - 4), "…");
-    const separator = painted.length > 0 ? 1 : 0;
-    const blockWidth = visibleWidth(text) + 2 + separator;
+    const text = truncateToWidth(block.text.replace(SGR, ""), Math.max(1, width - 6), "…");
+    const gap = painted.length > 0 ? 3 : 0;
+    const blockWidth = visibleWidth(text) + 4 + gap;
     if (used + blockWidth > width) break;
     used += blockWidth;
     painted.push({ text, background });
@@ -53,8 +54,9 @@ export function renderStatusBlocks(blocks: StatusBlock[], width: number, theme: 
 
   let row = "";
   painted.forEach(({ text, background }, index) => {
-    row += index === 0 ? background : `${foregroundOf(painted[index - 1]!.background)}${background}${glyph}`;
-    row += `${BLOCK_FOREGROUND} ${text} `;
+    if (index > 0) row += `\x1b[49m ${foregroundOf(painted[index - 1]!.background)}${glyph} ${background}`;
+    else row += background;
+    row += `${BLOCK_FOREGROUND}  ${text}  `;
   });
   const last = painted[painted.length - 1]!.background;
   return `${row}${foregroundOf(last)}\x1b[49m${glyph}${RESET}`;
@@ -83,9 +85,12 @@ export function renderFooterRows(
     const blocks = [...content.segments.map((text) => ({ text })), ...content.statuses];
     return footerRows(renderStatusBlocks(blocks, width, theme, glyph));
   }
-  const line = [...content.segments, joinStatuses(content.statuses, theme)].filter(Boolean).join(" ");
+  const statuses = content.statuses.map(({ text, color }) => (color ? applyColor(theme, color, text) : text));
+  const line = [...content.segments, ...statuses].map(bold).filter(Boolean).join("   ");
   return footerRows(line ? truncateToWidth(line, width, "…") : null);
 }
+
+const bold = (text: string): string => (text ? `\x1b[0m\x1b[1m${text}\x1b[0m` : "");
 
 function footerRows(line: string | null): string[] {
   return line ? ["", line] : [];

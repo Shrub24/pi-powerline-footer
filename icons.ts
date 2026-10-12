@@ -17,6 +17,9 @@ export interface IconSet {
   cache: string;
   speed: string;
   nix: string;
+  toolRunning: string;
+  toolDone: string;
+  toolFailed: string;
   input: string;
   output: string;
   host: string;
@@ -72,6 +75,9 @@ export const NERD_ICONS: IconSet = {
   cache: "\uF1C0",      // nf-fa-database (cache)
   speed: "\u{F04C5}",    // nf-md-speedometer
   nix: "\uF313",         // nf-linux-nixos
+  toolRunning: "\u{F042E}",
+  toolDone: "\uF00C",     // nf-fa-check
+  toolFailed: "\uF00D",   // nf-fa-times
   input: "\uF090",      // nf-fa-sign_in (input arrow)
   output: "\uF08B",     // nf-fa-sign_out (output arrow)
   host: "\uF109",       // nf-fa-laptop (host)
@@ -98,6 +104,9 @@ export const ASCII_ICONS: IconSet = {
   cache: "cache",
   speed: "~",
   nix: "nix",
+  toolRunning: "*",
+  toolDone: "ok",
+  toolFailed: "x",
   input: "in:",
   output: "out:",
   host: "host",

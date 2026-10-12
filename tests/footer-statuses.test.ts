@@ -21,14 +21,20 @@ const SUCCESS_FG = "\x1b[38;2;1;2;3m";
 
 const plainText = (rows: string[]) => rows.map((row) => row.replace(/\x1b\[[0-9;]*m/g, ""));
 
+test("the plain footer line bolds its text and joins parts with three spaces", () => {
+  const [, line] = renderFooterRows({ segments: ["↑1"], statuses: [{ text: "mc" }, { text: "git" }] }, 80, theme, "plain", ">");
+  assert.equal(plainText([line!])[0], "↑1   mc   git");
+  assert.ok(line!.startsWith("\x1b[0m\x1b[1m↑1"), "the segment text is bold");
+});
+
 test("the footer line puts segments before statuses, one row below the frame, and renders nothing when both are empty", () => {
   const plain = renderFooterRows({ segments: ["↑1 ↓2"], statuses: [{ text: "mc" }] }, 80, theme, "plain", ">");
-  assert.deepEqual(plainText(plain), ["", "↑1 ↓2 mc"]);
+  assert.deepEqual(plainText(plain), ["", "↑1 ↓2   mc"]);
 
   const blocks = renderFooterRows({ segments: ["↑1"], statuses: [{ text: "mc" }] }, 80, theme, "blocks", POWERLINE);
   assert.equal(blocks[0], "");
-  assert.ok(blocks[1]!.startsWith(`${ACCENT_BG}${BLOCK_FG} ↑1 `), "the footer segment is the first block");
-  assert.ok(blocks[1]!.indexOf(" ↑1 ") < blocks[1]!.indexOf(" mc "), "statuses follow the segments");
+  assert.ok(blocks[1]!.startsWith(`${ACCENT_BG}${BLOCK_FG}  ↑1  `), "the footer segment is the first block");
+  assert.ok(blocks[1]!.indexOf("  ↑1  ") < blocks[1]!.indexOf("  mc  "), "statuses follow the segments");
 
   assert.deepEqual(renderFooterRows({ segments: [], statuses: [] }, 80, theme, "plain", ">"), []);
   assert.deepEqual(renderFooterRows({ segments: [], statuses: [] }, 80, theme, "blocks", POWERLINE), []);
@@ -38,7 +44,7 @@ test("status blocks take backgrounds in rotation, dark text, and separators in t
   const row = renderStatusBlocks([{ text: "mc" }, { text: "git" }], 80, theme, POWERLINE);
   assert.equal(
     row,
-    `${ACCENT_BG}\x1b[1m\x1b[30m mc ${ACCENT_FG}${SUCCESS_BG}${POWERLINE}\x1b[1m\x1b[30m git ${SUCCESS_FG}\x1b[49m${POWERLINE}\x1b[0m`,
+    `${ACCENT_BG}\x1b[1m\x1b[30m  mc  \x1b[49m ${ACCENT_FG}${POWERLINE} ${SUCCESS_BG}\x1b[1m\x1b[30m  git  ${SUCCESS_FG}\x1b[49m${POWERLINE}\x1b[0m`,
   );
 });
 
@@ -51,7 +57,7 @@ test("an unresolved colour token falls back to the rotation, and empty input ren
 test("blocks that do not fit are dropped whole, and one long block is cut to the width", () => {
   const trailing = renderStatusBlocks([{ text: "alpha" }, { text: "beta" }, { text: "gamma" }], 12, theme, POWERLINE);
   assert.ok(visibleWidth(trailing) <= 12);
-  assert.ok(trailing.includes("alpha") && !trailing.includes("beta") && !trailing.includes("gamma"));
+  assert.ok(trailing.includes("  alpha  ") && !trailing.includes("beta") && !trailing.includes("gamma"));
 
   const long = renderStatusBlocks([{ text: "abcdefghijklmnop" }], 10, theme, POWERLINE);
   assert.ok(visibleWidth(long) <= 10 && long.includes("…"));
@@ -59,6 +65,6 @@ test("blocks that do not fit are dropped whole, and one long block is cut to the
 
 test("the ASCII separator set draws the same colour pairs with a plain glyph", () => {
   const row = renderStatusBlocks([{ text: "mc" }, { text: "git" }], 80, theme, ">");
-  assert.ok(row.includes(`${ACCENT_FG}${SUCCESS_BG}>`));
+  assert.ok(row.includes(`${ACCENT_FG}> ${SUCCESS_BG}`));
   assert.ok(!row.includes(POWERLINE));
 });

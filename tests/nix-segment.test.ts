@@ -8,6 +8,7 @@ test("nix state comes from IN_NIX_SHELL, with the shell's name only when it is s
   assert.equal(nixShellText({ IN_NIX_SHELL: "impure" }), "impure");
   assert.equal(nixShellText({ IN_NIX_SHELL: "pure", name: "nix-shell" }), "pure");
   assert.equal(nixShellText({ IN_NIX_SHELL: "impure", name: "shell" }), "impure");
+  assert.equal(nixShellText({ IN_NIX_SHELL: "impure", name: "nix-shell-env" }), "impure");
   assert.equal(nixShellText({ IN_NIX_SHELL: "impure", name: "my-app" }), "impure · my-app");
   assert.equal(nixShellText({ name: "my-app" }), undefined, "a name alone is not a nix shell");
   assert.equal(nixShellText({}), undefined);

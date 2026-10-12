@@ -285,7 +285,7 @@ const tokenOutSegment: StatusLineSegment = {
 };
 
 // Shell names nix-shell and nix develop set for their own generic shells; they say nothing about the project.
-const GENERIC_NIX_SHELL_NAMES = new Set(["nix-shell", "shell"]);
+const GENERIC_NIX_SHELL_NAMES = new Set(["nix-shell", "nix-shell-env", "shell"]);
 
 /** `impure` or `pure` from IN_NIX_SHELL, then the shell's name when it is specific. Undefined outside a nix shell. */
 export function nixShellText(env: NodeJS.ProcessEnv): string | undefined {
@@ -302,6 +302,21 @@ const nixSegment: StatusLineSegment = {
     const text = nixShellText(process.env);
     if (!text) return { content: "", visible: false };
     return { content: color(ctx, "path", `${getIcons().nix} ${text}`), visible: true };
+  },
+};
+
+// The running tool, or the last one that finished: its state is coloured like the git segment's markers.
+const TOOL_STATE_TOKEN = { running: "warning", done: "success", failed: "error" } as const;
+
+const toolSegment: StatusLineSegment = {
+  id: "tool",
+  render(ctx) {
+    const activity = ctx.tool;
+    if (!activity) return { content: "", visible: false };
+    const icons = getIcons();
+    const icon = { running: icons.toolRunning, done: icons.toolDone, failed: icons.toolFailed }[activity.state];
+    const more = activity.others > 0 ? ` +${activity.others}` : "";
+    return { content: applyColor(ctx.theme, TOOL_STATE_TOKEN[activity.state], `${icon} ${activity.name}${more}`), visible: true };
   },
 };
 
@@ -577,6 +592,7 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   tokens: tokensSegment,
   speed: speedSegment,
   nix: nixSegment,
+  tool: toolSegment,
   token_total: tokenTotalSegment,
   cost: costSegment,
   context_pct: contextPctSegment,

@@ -1,4 +1,5 @@
 import type { SpeedSample, SpeedShow } from "./speed.ts";
+import type { ToolActivity } from "./tool-activity.ts";
 import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import type { CostCurrencyCode } from "./currency-rates.ts";
 
@@ -45,6 +46,7 @@ export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
   "tokens",
   "speed",
   "nix",
+  "tool",
   "token_total",
   "cost",
   "context_pct",
@@ -242,6 +244,8 @@ export interface SegmentContext {
   
   /** The latest completed request's generation speed; absent until one completes. */
   speed?: SpeedSample;
+  /** The running or last finished tool; absent until a tool has run. */
+  tool?: ToolActivity;
 
   // Extension statuses
   extensionStatuses: ReadonlyMap<string, string>;

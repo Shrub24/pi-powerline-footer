@@ -1,4 +1,5 @@
 import { completeSpeedSample, noteSpeedFirstToken, startSpeedTiming, type SpeedSample, type SpeedTiming } from "./speed.ts";
+import { ToolActivityTracker } from "./tool-activity.ts";
 import {
   copyToClipboard,
   type ExtensionAPI,
@@ -1305,6 +1306,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   // The request in flight, and the latest completed request's speed (kept across aborted requests).
   let speedTiming: SpeedTiming | null = null;
   let lastSpeed: SpeedSample | undefined;
+  const toolActivity = new ToolActivityTracker();
   let approximateContextUsage: CoreContextUsage | null = null;
   let isStreaming = false;
   let tuiRef: any = null;
@@ -1929,6 +1931,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   // Track session start
   pi.on("session_start", async (event, ctx) => {
     dismissWelcome(currentCtx ?? ctx);
+    toolActivity.reset();
     shellSession?.dispose();
     shellSession = null;
     sessionGeneration++;
@@ -2170,6 +2173,16 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     onVibeAgentStart();
     dismissWelcome(ctx);
     currentCtx = ctx;
+  });
+
+  pi.on("tool_execution_start", (event) => {
+    toolActivity.start(event.toolCallId, event.toolName);
+    requestStatusRender();
+  });
+
+  pi.on("tool_execution_end", (event) => {
+    toolActivity.end(event.toolCallId, event.toolName, event.isError);
+    requestStatusRender();
   });
 
   pi.on("before_provider_request", () => {
@@ -3046,6 +3059,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       cwd: ctx.cwd,
       usageStats: { input, output, cacheRead, cacheWrite, cost, subagentCost },
       speed: lastSpeed,
+      tool: toolActivity.activity,
       contextTokens,
       contextPercent,
       contextWindow,
