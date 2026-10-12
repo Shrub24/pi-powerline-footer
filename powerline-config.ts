@@ -152,6 +152,7 @@ function normalizeCustomStatusItem(raw: unknown, idOverride?: string): CustomSta
   if (!id) return null;
 
   const statusKey = typeof raw.statusKey === "string" && raw.statusKey.trim() ? raw.statusKey.trim() : id;
+  const icon = normalizeCustomPrefix(raw.icon);
 
   return {
     id,
@@ -160,6 +161,8 @@ function normalizeCustomStatusItem(raw: unknown, idOverride?: string): CustomSta
     color: normalizeCustomColor(raw.color),
     selfColorize: raw.selfColorize === true,
     prefix: normalizeCustomPrefix(raw.prefix),
+    ...(icon ? { icon } : {}),
+    ...(raw.thinkingTint === true ? { thinkingTint: true } : {}),
     hideWhenMissing: raw.hideWhenMissing !== false,
     excludeFromExtensionStatuses: raw.excludeFromExtensionStatuses !== false,
   };

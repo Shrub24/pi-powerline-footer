@@ -552,6 +552,25 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   vim_mode: vimModeSegment,
 };
 
+// The level words the router and Pi use for a thinking level; `min` and `med` are short forms.
+const THINKING_LEVEL_BY_WORD: Record<string, Parameters<ThemeLike["getThinkingBorderColor"]>[0]> = {
+  off: "off",
+  minimal: "minimal",
+  min: "minimal",
+  low: "low",
+  medium: "medium",
+  med: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+};
+
+/** The thinking level a status names by its leading word, e.g. `high✎`; undefined when it names none. */
+function thinkingLevelOf(status: string): Parameters<ThemeLike["getThinkingBorderColor"]>[0] | undefined {
+  const word = status.replace(/\x1b\[[0-9;]*m/g, "").match(/[a-z]+/i)?.[0].toLowerCase();
+  return word === undefined ? undefined : THINKING_LEVEL_BY_WORD[word];
+}
+
 function renderCustomSegment(id: `custom:${string}`, ctx: SegmentContext): RenderedSegment {
   const customItemId = id.slice("custom:".length);
   const custom = ctx.customItemsById.get(customItemId);
@@ -566,6 +585,15 @@ function renderCustomSegment(id: `custom:${string}`, ctx: SegmentContext): Rende
   let content = normalizedStatus;
   if (custom.prefix) {
     content = `${custom.prefix}${SEP_DOT}${content}`;
+  }
+  const level = custom.thinkingTint ? thinkingLevelOf(normalizedStatus) : undefined;
+  if (level) {
+    // The icon sits inside the tint, like the text it labels.
+    const labelled = custom.icon ? `${custom.icon} ${content}` : content;
+    return { content: boldText(ctx.theme.getThinkingBorderColor(level)(labelled)), visible: true };
+  }
+  if (custom.icon) {
+    content = `${custom.icon} ${content}`;
   }
   if (custom.color && !custom.selfColorize) {
     content = applyColor(ctx.theme, custom.color, content);

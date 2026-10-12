@@ -128,6 +128,10 @@ export interface CustomStatusItem {
   color?: ColorValue;
   selfColorize: boolean;
   prefix?: string;
+  /** Glyph placed before the text, with one space. Unlike `prefix`, it joins the tint when `thinkingTint` is set. */
+  icon?: string;
+  /** Colours the text by the thinking level it names, with Pi's border tint for that level, in bold. */
+  thinkingTint?: boolean;
   hideWhenMissing: boolean;
   excludeFromExtensionStatuses: boolean;
 }
