@@ -3629,8 +3629,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             result.push(bodyRow(prefix, lines[i] || ""));
           }
 
-          if (bottomBorderIndex === 1) {
-            result.push(bodyRow(promptPrefix, " ".repeat(contentWidth)));
+          // The rounded frame is two body rows tall by default; the default frame keeps one.
+          const minBodyRows = rounded ? 2 : 1;
+          for (let row = Math.max(0, bottomBorderIndex - 1); row < minBodyRows; row++) {
+            result.push(bodyRow(row === 0 ? promptPrefix : contPrefix, " ".repeat(contentWidth)));
           }
 
           result.push(frameRows ? frameRows.bottom : renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));

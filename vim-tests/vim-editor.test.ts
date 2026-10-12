@@ -302,13 +302,13 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
   // The label cell's background is the insert token (borderMuted → code 1), not the border rule's.
   assert.match(rawInsertFrame.at(-1)!, /\x1b\[48;5;1m\x1b\[30m INSERT /, "the label is a background block in the mode colour");
   const insertFrame = plain(rawInsertFrame);
-  assert.equal(insertFrame.length, 3, "top rule, one body row and bottom rule");
+  assert.equal(insertFrame.length, 4, "top rule, two body rows and bottom rule");
   assert.ok(insertFrame[0]!.startsWith("\u256d") && insertFrame[0]!.endsWith("\u256e"));
   assert.match(insertFrame[0]!, /Test model/);
   assert.ok(insertFrame[1]!.startsWith("\u2502 > ") && insertFrame[1]!.endsWith(" \u2502"));
   assert.ok(insertFrame.at(-1)!.startsWith("\u2570") && insertFrame.at(-1)!.endsWith("\u256f"));
   assert.match(insertFrame.at(-1)!, / INSERT /);
-  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), [FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH]);
+  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), [FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH]);
 
   // The label is read at paint time, so a mode switch shows without any layout change.
   sendKeys(editor, ["\x1b"]);
