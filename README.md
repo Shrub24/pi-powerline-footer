@@ -548,6 +548,14 @@ The path segment supports three modes:
 
 Configure via preset options: `path: { mode: "full" }`
 
+## Jujutsu (jj)
+
+In a repo with a `.jj` directory the git segment shows the working copy's bookmark (or the nearest bookmarked ancestor, else the change id), `*` when the working copy is not empty, and `✖` on a conflict. jj state is read with `jj log --ignore-working-copy`, so it reflects jj's last snapshot. `git.vcs` picks the tool: `"auto"` (default, jj when `.jj` is found), `"git"` or `"jj"`. If `jj` is missing or fails, the segment falls back to git.
+
+```json
+"git": { "vcs": "git" }
+```
+
 ## Git polling
 
 By default the git segment polls both branch and dirty state. If background `git status --porcelain` calls interfere with your workflow, use branch-only polling:

@@ -359,6 +359,7 @@ function normalizeSegmentOptions(raw: Record<string, unknown>): StatusLineSegmen
       ...(typeof raw.git.showUnstaged === "boolean" ? { showUnstaged: raw.git.showUnstaged } : {}),
       ...(typeof raw.git.showUntracked === "boolean" ? { showUntracked: raw.git.showUntracked } : {}),
       ...(raw.git.polling === "full" || raw.git.polling === "branch" || raw.git.polling === "off" ? { polling: raw.git.polling } : {}),
+      ...(raw.git.vcs === "auto" || raw.git.vcs === "git" || raw.git.vcs === "jj" ? { vcs: raw.git.vcs } : {}),
       ...(typeof raw.git.hostIcon === "boolean" ? { hostIcon: raw.git.hostIcon } : {}),
     };
   }

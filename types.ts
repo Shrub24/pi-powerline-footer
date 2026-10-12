@@ -99,6 +99,8 @@ export interface StatusLineSegmentOptions {
     showUnstaged?: boolean;
     showUntracked?: boolean;
     polling?: "full" | "branch" | "off";
+    /** Which VCS the segment reads: jj when a `.jj` directory is found (auto), or forced. */
+    vcs?: "auto" | "git" | "jj";
     /** Replace the branch icon with the origin remote's host logo
      * (GitHub/GitLab/Bitbucket, or a generic git logo). Default false. */
     hostIcon?: boolean;
@@ -166,6 +168,8 @@ export interface GitStatus {
   staged: number;
   unstaged: number;
   untracked: number;
+  /** Set when the segment reads a jj repo: the label replaces the branch and the git counts stay zero. */
+  jj?: { dirty: boolean; conflict: boolean };
 }
 
 // Usage statistics

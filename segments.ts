@@ -153,14 +153,14 @@ const gitSegment: StatusLineSegment = {
   render(ctx) {
     const icons = getIcons();
     const opts = ctx.options.git ?? {};
-    const { branch, staged, unstaged, untracked } = ctx.git;
+    const { branch, staged, unstaged, untracked, jj } = ctx.git;
     const gitStatus = (staged > 0 || unstaged > 0 || untracked > 0) 
       ? { staged, unstaged, untracked } 
       : null;
 
     if (!branch && !gitStatus) return { content: "", visible: false };
 
-    const isDirty = gitStatus && (gitStatus.staged > 0 || gitStatus.unstaged > 0 || gitStatus.untracked > 0);
+    const isDirty = jj ? jj.dirty : gitStatus && (gitStatus.staged > 0 || gitStatus.unstaged > 0 || gitStatus.untracked > 0);
     const showBranch = opts.showBranch !== false;
     const branchColor: SemanticColor = isDirty ? "gitDirty" : "gitClean";
 
@@ -173,8 +173,8 @@ const gitSegment: StatusLineSegment = {
     }
 
     // Add status indicators (each with their own color, not wrapped)
+    const indicators: string[] = [];
     if (gitStatus) {
-      const indicators: string[] = [];
       if (opts.showUnstaged !== false && gitStatus.unstaged > 0) {
         indicators.push(applyColor(ctx.theme, "warning", `*${gitStatus.unstaged}`));
       }
@@ -184,14 +184,17 @@ const gitSegment: StatusLineSegment = {
       if (opts.showUntracked !== false && gitStatus.untracked > 0) {
         indicators.push(applyColor(ctx.theme, "muted", `?${gitStatus.untracked}`));
       }
-      if (indicators.length > 0) {
-        const indicatorText = indicators.join(" ");
-        if (!content && showBranch === false) {
-          // No branch shown, color the git icon with branch color
-          content = color(ctx, branchColor, icons.git ? `${icons.git} ` : "") + indicatorText;
-        } else {
-          content += content ? ` ${indicatorText}` : indicatorText;
-        }
+    }
+    // jj has no index, so a dirty working copy is one marker and a conflict is another.
+    if (jj?.dirty) indicators.push(applyColor(ctx.theme, "warning", "*"));
+    if (jj?.conflict) indicators.push(applyColor(ctx.theme, "error", "✖"));
+    if (indicators.length > 0) {
+      const indicatorText = indicators.join(" ");
+      if (!content && showBranch === false) {
+        // No branch shown, color the git icon with branch color
+        content = color(ctx, branchColor, icons.git ? `${icons.git} ` : "") + indicatorText;
+      } else {
+        content += content ? ` ${indicatorText}` : indicatorText;
       }
     }
 

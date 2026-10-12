@@ -2994,7 +2994,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       : null;
     // Full mode retains counts for dirty branch coloring, even with hidden indicators.
     const gitStatus = showGit
-      ? getGitStatus(gitBranch, gitOptions?.polling, ctx.cwd)
+      ? getGitStatus(gitBranch, gitOptions?.polling, ctx.cwd, gitOptions?.vcs)
       : { branch: null, staged: 0, unstaged: 0, untracked: 0 };
     const extensionStatuses = footerDataRef?.getExtensionStatuses() ?? new Map();
     const customItemsById = new Map(config.customItems.map((item) => [item.id, item]));

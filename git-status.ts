@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { GitStatus } from "./types.ts";
 
 interface CachedGitStatus {
@@ -15,6 +16,13 @@ interface CachedBranch {
 }
 
 export type GitPollingMode = "full" | "branch" | "off";
+export type GitVcs = "auto" | "git" | "jj";
+
+export interface JjState {
+  label: string;
+  dirty: boolean;
+  conflict: boolean;
+}
 
 /** Known git hosting providers we render a dedicated icon for. */
 export type GitHost = "github" | "gitlab" | "bitbucket" | "other";
@@ -30,6 +38,10 @@ const REMOTE_TTL_MS = 60_000; // Origin remote almost never changes within a ses
 let cachedStatus: CachedGitStatus | null = null;
 let cachedBranch: CachedBranch | null = null;
 let cachedRemoteHost: CachedRemoteHost | null = null;
+let cachedJj: { state: JjState | null; timestamp: number } | null = null;
+let pendingJjFetch: Promise<void> | null = null;
+let jjInvalidationCounter = 0;
+let currentCwdHasJj: boolean | null = null;
 let pendingRemoteFetch: Promise<void> | null = null;
 let pendingFetch: Promise<void> | null = null;
 let pendingBranchFetch: Promise<void> | null = null;
@@ -50,6 +62,8 @@ function useCwd(cwd: string): string {
   invalidateGitBranch();
   cachedStatus = null;
   cachedBranch = null;
+  cachedJj = null;
+  currentCwdHasJj = null;
   lastProviderBranch = null;
   return cwd;
 }
@@ -122,11 +136,15 @@ export function readOnlyGitEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Pro
   return { ...env, GIT_OPTIONAL_LOCKS: "0" };
 }
 
-function runGit(args: string[], cwd: string, timeoutMs = 200): Promise<string | null> {
+function runGit(args: string[], cwd: string, timeoutMs?: number): Promise<string | null> {
+  return runProcess("git", args, cwd, timeoutMs);
+}
+
+function runProcess(command: string, args: string[], cwd: string, timeoutMs = 200): Promise<string | null> {
   return new Promise((resolve) => {
     let proc;
     try {
-      proc = spawn("git", args, {
+      proc = spawn(command, args, {
         stdio: ["ignore", "pipe", "pipe"],
         env: readOnlyGitEnv(),
         windowsHide: true,
@@ -252,6 +270,70 @@ async function fetchGitStatus(cwd: string): Promise<{ staged: number; unstaged: 
   return parseGitStatusOutput(output);
 }
 
+// Working copy and its nearest bookmarked ancestor. `--ignore-working-copy` keeps the call read-only:
+// the state is as of jj's last snapshot.
+const JJ_REVSET = "@ | latest(::@ & bookmarks(), 1)";
+const JJ_TEMPLATE = 'if(current_working_copy, "W", "") ++ "\\t" ++ bookmarks.map(|b| b.name()).join(",") ++ "\\t" ++ change_id.shortest(8) ++ "\\t" ++ if(empty, "0", "1") ++ "\\t" ++ if(conflict, "1", "0") ++ "\\n"';
+
+/**
+ * Parse `jj log` output for JJ_REVSET. The label is the working copy's bookmark, else the nearest
+ * bookmarked ancestor's, else the working copy's change id.
+ */
+export function parseJjLog(output: string): JjState | null {
+  const rows = output.split("\n").filter((line) => line.length > 0).map((line) => line.split("\t"));
+  const working = rows.find((row) => row[0] === "W");
+  if (!working) return null;
+
+  const [, ownBookmarks = "", changeId = "", notEmpty, conflict] = working;
+  const ancestorBookmarks = rows.find((row) => row !== working && row[1])?.[1] ?? "";
+  return {
+    label: ownBookmarks || ancestorBookmarks || changeId,
+    dirty: notEmpty === "1",
+    conflict: conflict === "1",
+  };
+}
+
+function sameJjState(a: JjState | null, b: JjState | null): boolean {
+  return a?.label === b?.label && a?.dirty === b?.dirty && a?.conflict === b?.conflict;
+}
+
+async function fetchJjState(cwd: string): Promise<JjState | null> {
+  const output = await runProcess("jj", ["log", "-r", JJ_REVSET, "--no-graph", "--ignore-working-copy", "--color=never", "-T", JJ_TEMPLATE], cwd, 500);
+  return output === null ? null : parseJjLog(output);
+}
+
+// Serve-stale like the git reads. A null state (jj missing, failing, or no working copy) makes
+// getGitStatus fall back to git.
+function getJjState(cwd: string): JjState | null {
+  if (!pendingJjFetch && (!cachedJj || Date.now() - cachedJj.timestamp >= CACHE_TTL_MS)) {
+    const fetchId = jjInvalidationCounter;
+    pendingJjFetch = fetchJjState(cwd).then((state) => {
+      if (fetchId !== jjInvalidationCounter) return;
+      const changed = !sameJjState(cachedJj?.state ?? null, state);
+      cachedJj = { state, timestamp: Date.now() };
+      if (changed) notifyGitUpdate();
+    }).finally(() => {
+      if (fetchId === jjInvalidationCounter) pendingJjFetch = null;
+    });
+  }
+  return cachedJj?.state ?? null;
+}
+
+// A `.jj` directory at or above cwd. Looked up once per cwd: useCwd clears it on a change.
+function hasJjRepo(cwd: string): boolean {
+  if (currentCwdHasJj === null) {
+    currentCwdHasJj = false;
+    for (let dir = cwd; ; dir = dirname(dir)) {
+      if (existsSync(join(dir, ".jj"))) {
+        currentCwdHasJj = true;
+        break;
+      }
+      if (dirname(dir) === dir) break;
+    }
+  }
+  return currentCwdHasJj;
+}
+
 /**
  * Get the current git branch with caching.
  * Reuse Pi's attached branch; poll only when unavailable or detached.
@@ -300,8 +382,12 @@ export function getCurrentBranch(providerBranch: string | null, cwd = process.cw
  * This is designed for synchronous render() calls - returns last known value
  * while refreshing in background.
  */
-export function getGitStatus(providerBranch: string | null, pollingMode: GitPollingMode = "full", cwd = process.cwd()): GitStatus {
+export function getGitStatus(providerBranch: string | null, pollingMode: GitPollingMode = "full", cwd = process.cwd(), vcs: GitVcs = "auto"): GitStatus {
   cwd = useCwd(cwd);
+  if (pollingMode !== "off" && (vcs === "jj" || (vcs === "auto" && hasJjRepo(cwd)))) {
+    const jj = getJjState(cwd);
+    if (jj) return { branch: jj.label, staged: 0, unstaged: 0, untracked: 0, jj: { dirty: jj.dirty, conflict: jj.conflict } };
+  }
   const now = Date.now();
   const branch = pollingMode === "off" ? providerBranch : getCurrentBranch(providerBranch, cwd);
 
@@ -352,6 +438,9 @@ export function invalidateGitStatus(): void {
   if (cachedStatus) cachedStatus.timestamp = 0; // expire, but keep serving the stale value
   invalidationCounter++; // Increment to invalidate any pending fetches
   pendingFetch = null;
+  if (cachedJj) cachedJj.timestamp = 0;
+  jjInvalidationCounter++;
+  pendingJjFetch = null;
 }
 
 /**
