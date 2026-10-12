@@ -62,11 +62,11 @@ function createSegmentContext(overrides: Partial<SegmentContext> = {}): SegmentC
 test("session segment shows the current display name when available", () => {
   const rendered = renderSegment("session", createSegmentContext({
     sessionId: "12345678-abcdef",
-    sessionName: "My working session",
+    sessionName: "My working session with a very long name here",
   }));
 
-  // Names longer than 16 columns are cut with an ellipsis.
-  assert.equal(stripAnsi(rendered.content), "My working sess\u2026");
+  // Names longer than 32 columns are cut with an ellipsis.
+  assert.equal(stripAnsi(rendered.content), "My working session with a very \u2026");
   assert.equal(rendered.content.includes("12345678"), false);
   assert.equal(rendered.visible, true);
 });
