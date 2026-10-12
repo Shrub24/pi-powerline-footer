@@ -175,7 +175,7 @@ export interface GitStatus {
   unstaged: number;
   untracked: number;
   /** Set when the segment reads a jj repo: the label replaces the branch and the git counts stay zero. */
-  jj?: { dirty: boolean; conflict: boolean };
+  jj?: { dirty: boolean; conflict: boolean; added: number; removed: number };
 }
 
 // Usage statistics

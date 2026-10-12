@@ -22,6 +22,8 @@ export interface JjState {
   label: string;
   dirty: boolean;
   conflict: boolean;
+  added: number;
+  removed: number;
 }
 
 /** Known git hosting providers we render a dedicated icon for. */
@@ -273,7 +275,8 @@ async function fetchGitStatus(cwd: string): Promise<{ staged: number; unstaged: 
 // Working copy and its nearest bookmarked ancestor. `--ignore-working-copy` keeps the call read-only:
 // the state is as of jj's last snapshot.
 const JJ_REVSET = "@ | latest(::@ & bookmarks(), 1)";
-const JJ_TEMPLATE = 'if(current_working_copy, "W", "") ++ "\\t" ++ bookmarks.map(|b| b.name()).join(",") ++ "\\t" ++ change_id.shortest(8) ++ "\\t" ++ if(empty, "0", "1") ++ "\\t" ++ if(conflict, "1", "0") ++ "\\n"';
+// Line counts come from diff.stat() and are computed for the working-copy row only.
+const JJ_TEMPLATE = 'if(current_working_copy, "W", "") ++ "\\t" ++ bookmarks.map(|b| b.name()).join(",") ++ "\\t" ++ change_id.shortest(8) ++ "\\t" ++ if(empty, "0", "1") ++ "\\t" ++ if(conflict, "1", "0") ++ "\\t" ++ if(current_working_copy, diff.stat().total_added(), "0") ++ "\\t" ++ if(current_working_copy, diff.stat().total_removed(), "0") ++ "\\n"';
 
 /**
  * Parse `jj log` output for JJ_REVSET. The label is the working copy's bookmark, else the nearest
@@ -284,17 +287,19 @@ export function parseJjLog(output: string): JjState | null {
   const working = rows.find((row) => row[0] === "W");
   if (!working) return null;
 
-  const [, ownBookmarks = "", changeId = "", notEmpty, conflict] = working;
+  const [, ownBookmarks = "", changeId = "", notEmpty, conflict, added = "0", removed = "0"] = working;
   const ancestorBookmarks = rows.find((row) => row !== working && row[1])?.[1] ?? "";
   return {
     label: ownBookmarks || ancestorBookmarks || changeId,
     dirty: notEmpty === "1",
     conflict: conflict === "1",
+    added: Number(added),
+    removed: Number(removed),
   };
 }
 
 function sameJjState(a: JjState | null, b: JjState | null): boolean {
-  return a?.label === b?.label && a?.dirty === b?.dirty && a?.conflict === b?.conflict;
+  return a?.label === b?.label && a?.dirty === b?.dirty && a?.conflict === b?.conflict && a?.added === b?.added && a?.removed === b?.removed;
 }
 
 async function fetchJjState(cwd: string): Promise<JjState | null> {
@@ -386,7 +391,7 @@ export function getGitStatus(providerBranch: string | null, pollingMode: GitPoll
   cwd = useCwd(cwd);
   if (pollingMode !== "off" && (vcs === "jj" || (vcs === "auto" && hasJjRepo(cwd)))) {
     const jj = getJjState(cwd);
-    if (jj) return { branch: jj.label, staged: 0, unstaged: 0, untracked: 0, jj: { dirty: jj.dirty, conflict: jj.conflict } };
+    if (jj) return { branch: jj.label, staged: 0, unstaged: 0, untracked: 0, jj: { dirty: jj.dirty, conflict: jj.conflict, added: jj.added, removed: jj.removed } };
   }
   const now = Date.now();
   const branch = pollingMode === "off" ? providerBranch : getCurrentBranch(providerBranch, cwd);

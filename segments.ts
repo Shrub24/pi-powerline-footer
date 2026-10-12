@@ -185,8 +185,13 @@ const gitSegment: StatusLineSegment = {
         indicators.push(applyColor(ctx.theme, "muted", `?${gitStatus.untracked}`));
       }
     }
-    // jj has no index, so a dirty working copy is one marker and a conflict is another.
-    if (jj?.dirty) indicators.push(applyColor(ctx.theme, "warning", "*"));
+    // jj has no index: the working copy's line counts stand in for staged and unstaged. A dirty
+    // working copy with no line counts (e.g. a rename only) keeps the bare marker.
+    if (jj && opts.showUnstaged !== false && (jj.added > 0 || jj.removed > 0)) {
+      indicators.push(applyColor(ctx.theme, "success", `+${jj.added}`), applyColor(ctx.theme, "error", `-${jj.removed}`));
+    } else if (jj?.dirty) {
+      indicators.push(applyColor(ctx.theme, "warning", "*"));
+    }
     if (jj?.conflict) indicators.push(applyColor(ctx.theme, "error", "✖"));
     if (indicators.length > 0) {
       const indicatorText = indicators.join(" ");
