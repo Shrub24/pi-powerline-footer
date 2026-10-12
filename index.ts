@@ -34,7 +34,7 @@ import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
 import { ansi, getFgAnsiCode } from "./colors.ts";
 import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
-import { getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor } from "./editor-composition.ts";
+import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor } from "./editor-composition.ts";
 import { EditorPerfProfiler, readEditorPerfOptions } from "./editor-performance.ts";
 import { CoreContextUsageCache, estimateInitialContextTokens, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
 import { isStaleExtensionContextError, shouldShowStartupWelcome } from "./lifecycle.ts";
@@ -1222,6 +1222,8 @@ function warnInvalidSegmentSettings(ctx: any): void {
 
 export default function powerlineFooter(pi: ExtensionAPI) {
   const editorPerf = new EditorPerfProfiler(readEditorPerfOptions());
+  // Owns the factory this instance installs and the foreign factory every rebuild builds on.
+  const editorFactoryTracker = createEditorFactoryTracker();
   const startupSettings = readSettings();
   config = parsePowerlineConfig(startupSettings.powerline, PRESET_NAMES);
   let resolvedShortcuts = resolveShortcutConfig(startupSettings);
@@ -3246,9 +3248,11 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     ctx.ui.setWidget("powerline-last-prompt", undefined);
 
     let autocompleteFixed = !bashModeSettings.completions;
-    const previousEditorFactory = typeof ctx.ui.getEditorComponent === "function" ? ctx.ui.getEditorComponent() : undefined;
+    const previousEditorFactory = editorFactoryTracker.capture(
+      typeof ctx.ui.getEditorComponent === "function" ? ctx.ui.getEditorComponent() : undefined,
+    );
 
-    const editorFactory = (tui: any, editorTheme: any, keybindings: any) => {
+    const editorFactory = editorFactoryTracker.own((tui: any, editorTheme: any, keybindings: any) => {
       const previousEditor = previousEditorFactory?.(tui, editorTheme, keybindings);
       const editor = new BashModeEditor(tui, editorTheme, keybindings, {
         keybindings,
@@ -3516,7 +3520,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       };
 
       return editor;
-    };
+    });
 
     ctx.ui.setEditorComponent(editorFactory);
 
