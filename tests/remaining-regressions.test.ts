@@ -66,7 +66,7 @@ test("session segment shows the current display name when available", () => {
   }));
 
   // Names longer than 16 columns are cut with an ellipsis.
-  assert.equal(stripAnsi(rendered.content).endsWith("My working sess\u2026"), true);
+  assert.equal(stripAnsi(rendered.content), "My working sess\u2026");
   assert.equal(rendered.content.includes("12345678"), false);
   assert.equal(rendered.visible, true);
 });
@@ -254,4 +254,9 @@ test("tokens segment shows unlabelled input and output and hides when both are z
   assert.equal(rendered.content.replace(/\x1b\[[0-9;]*m/g, ""), "↑1.5k ↓42");
 
   assert.equal(renderSegment("tokens", createSegmentContext()).visible, false);
+});
+
+test("path and session segments show the bare value with no label word", () => {
+  const path = renderSegment("path", createSegmentContext({ cwd: "/tmp/work/proj" }));
+  assert.equal(stripAnsi(path.content), "proj");
 });

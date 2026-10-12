@@ -96,7 +96,6 @@ const shellModeSegment: StatusLineSegment = {
 const pathSegment: StatusLineSegment = {
   id: "path",
   render(ctx) {
-    const icons = getIcons();
     const opts = ctx.options.path ?? {};
     const mode = opts.mode ?? "basename";
 
@@ -126,8 +125,7 @@ const pathSegment: StatusLineSegment = {
       }
     }
 
-    const content = withIcon(icons.folder, pwd);
-    return { content: color(ctx, "path", content), visible: true };
+    return { content: color(ctx, "path", pwd), visible: true };
   },
 };
 
@@ -447,12 +445,11 @@ const SESSION_NAME_MAX_WIDTH = 16;
 const sessionSegment: StatusLineSegment = {
   id: "session",
   render(ctx) {
-    const icons = getIcons();
     const sessionId = ctx.sessionId;
     const name = ctx.sessionName?.trim() ? ctx.sessionName : sessionId?.slice(0, 8) || "new";
     const display = truncateToWidth(name, SESSION_NAME_MAX_WIDTH, "…");
 
-    return { content: withIcon(icons.session, display), visible: true };
+    return { content: display, visible: true };
   },
 };
 
