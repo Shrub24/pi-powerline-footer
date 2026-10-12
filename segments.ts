@@ -1,7 +1,9 @@
 import { hostname as osHostname } from "node:os";
 import { basename } from "node:path";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { BuiltinStatusLineSegmentId, ColorValue, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId } from "./types.ts";
+import type { BuiltinStatusLineSegmentId, ColorValue, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId, ThemeLike } from "./types.ts";
+import { boldText } from "./colors.ts";
+import { joinStatuses } from "./footer-statuses.ts";
 import { formatExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
 import { fg, applyColor } from "./theme.ts";
 import { getIcons, SEP_DOT, getThinkingText } from "./icons.ts";
@@ -206,7 +208,6 @@ const thinkingSegment: StatusLineSegment = {
   id: "thinking",
   render(ctx) {
     const level = ctx.thinkingLevel || "off";
-
     const levelText: Record<string, string> = {
       off: "off",
       minimal: "min",
@@ -215,30 +216,9 @@ const thinkingSegment: StatusLineSegment = {
       high: "high",
       xhigh: "xhigh",
     };
-    const label = levelText[level] || level;
-    const content = `think:${label}`;
-
-    if (level === "high") {
-      return { content: color(ctx, "thinkingHigh", content), visible: true };
-    }
-    if (level === "xhigh") {
-      return { content: color(ctx, "thinkingXhigh", content), visible: true };
-    }
-    if (level === "max") {
-      return { content: color(ctx, "thinkingMax", content), visible: true };
-    }
-
-    if (level === "minimal") {
-      return { content: color(ctx, "thinkingMinimal", content), visible: true };
-    }
-    if (level === "low") {
-      return { content: color(ctx, "thinkingLow", content), visible: true };
-    }
-    if (level === "medium") {
-      return { content: color(ctx, "thinkingMedium", content), visible: true };
-    }
-
-    return { content: color(ctx, "thinking", content), visible: true };
+    // The same tint the editor border takes for this level, so the segment and the border agree.
+    const tint = ctx.theme.getThinkingBorderColor(level as Parameters<ThemeLike["getThinkingBorderColor"]>[0]);
+    return { content: boldText(tint(`think:${levelText[level] || level}`)), visible: true };
   },
 };
 
@@ -527,13 +507,10 @@ const extensionStatusesSegment: StatusLineSegment = {
     if (!statuses || statuses.size === 0) return { content: "", visible: false };
 
     // Compact statuses are joined with a separator; notification-style ("[...") statuses show above the editor.
-    const parts = extensionStatusParts(ctx).map(({ text, color }) => (color ? applyColor(ctx.theme, color, text) : text));
-
+    const parts = extensionStatusParts(ctx);
     if (parts.length === 0) return { content: "", visible: false };
 
-    // Normalization strips trailing SGR resets; isolate each status's styling.
-    const content = parts.map((part) => `\x1b[0m${part}\x1b[0m`).join(SEP_DOT);
-    return { content, visible: true };
+    return { content: joinStatuses(parts, ctx.theme), visible: true };
   },
 };
 

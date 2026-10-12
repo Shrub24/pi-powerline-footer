@@ -239,7 +239,7 @@ function normalizeLayout(
   const customItemIds = new Set(customItems.map((item) => item.id));
   const globallyPlaced = new Set<StatusLineSegmentId>();
 
-  for (const row of ["left", "right", "secondary"] as const) {
+  for (const row of ["left", "right", "secondary", "footer"] as const) {
     const entries = raw[row];
     if (!Array.isArray(entries)) continue;
 
@@ -506,12 +506,14 @@ export function mergeSegmentsWithCustomItems(
   leftSegments: StatusLineSegmentId[];
   rightSegments: StatusLineSegmentId[];
   secondarySegments: StatusLineSegmentId[];
+  footerSegments: StatusLineSegmentId[];
 } {
   const layout = options.layout ?? null;
   const explicitlyPlaced = new Set([
     ...(layout?.left ?? []),
     ...(layout?.right ?? []),
     ...(layout?.secondary ?? []),
+    ...(layout?.footer ?? []),
   ]);
   const disabled = new Set(options.disabledSegments ?? []);
 
@@ -540,6 +542,7 @@ export function mergeSegmentsWithCustomItems(
     leftSegments: buildRow("left", layout?.left, presetDef.leftSegments),
     rightSegments: buildRow("right", layout?.right, presetDef.rightSegments),
     secondarySegments: buildRow("secondary", layout?.secondary, presetDef.secondarySegments ?? []),
+    footerSegments: (layout?.footer ?? []).filter((id) => !disabled.has(id)),
   };
 }
 

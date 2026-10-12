@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { footerRows, renderStatusBlocks } from "../footer-statuses.ts";
+import { renderFooterRows, renderStatusBlocks } from "../footer-statuses.ts";
 
 // accent and success have colours; borderMuted resolves to the terminal default (dim only), like Pi's bundled theme.
 const theme = {
@@ -16,18 +16,29 @@ const POWERLINE = "\uE0B0";
 const ACCENT_BG = "\x1b[48;5;6m";
 const SUCCESS_BG = "\x1b[48;2;1;2;3m";
 const ACCENT_FG = "\x1b[38;5;6m";
+const BLOCK_FG = "\x1b[1m\x1b[30m";
 const SUCCESS_FG = "\x1b[38;2;1;2;3m";
 
-test("the footer statuses line sits one row below the frame, and only when there are statuses", () => {
-  assert.deepEqual(footerRows(null), []);
-  assert.deepEqual(footerRows("statuses"), ["", "statuses"]);
+const plainText = (rows: string[]) => rows.map((row) => row.replace(/\x1b\[[0-9;]*m/g, ""));
+
+test("the footer line puts segments before statuses, one row below the frame, and renders nothing when both are empty", () => {
+  const plain = renderFooterRows({ segments: ["↑1 ↓2"], statuses: [{ text: "mc" }] }, 80, theme, "plain", ">");
+  assert.deepEqual(plainText(plain), ["", "↑1 ↓2 mc"]);
+
+  const blocks = renderFooterRows({ segments: ["↑1"], statuses: [{ text: "mc" }] }, 80, theme, "blocks", POWERLINE);
+  assert.equal(blocks[0], "");
+  assert.ok(blocks[1]!.startsWith(`${ACCENT_BG}${BLOCK_FG} ↑1 `), "the footer segment is the first block");
+  assert.ok(blocks[1]!.indexOf(" ↑1 ") < blocks[1]!.indexOf(" mc "), "statuses follow the segments");
+
+  assert.deepEqual(renderFooterRows({ segments: [], statuses: [] }, 80, theme, "plain", ">"), []);
+  assert.deepEqual(renderFooterRows({ segments: [], statuses: [] }, 80, theme, "blocks", POWERLINE), []);
 });
 
 test("status blocks take backgrounds in rotation, dark text, and separators in the previous block's colour", () => {
   const row = renderStatusBlocks([{ text: "mc" }, { text: "git" }], 80, theme, POWERLINE);
   assert.equal(
     row,
-    `${ACCENT_BG}\x1b[30m mc ${ACCENT_FG}${SUCCESS_BG}${POWERLINE}\x1b[30m git ${SUCCESS_FG}\x1b[49m${POWERLINE}\x1b[0m`,
+    `${ACCENT_BG}\x1b[1m\x1b[30m mc ${ACCENT_FG}${SUCCESS_BG}${POWERLINE}\x1b[1m\x1b[30m git ${SUCCESS_FG}\x1b[49m${POWERLINE}\x1b[0m`,
   );
 });
 

@@ -76,6 +76,7 @@ async function vimHarness(
     fg: (token: string, text: string) => `${modeColorEscape(token)}${text}\x1b[39m`,
     getFgAnsi: (token: string) => modeColorEscape(token),
     bold: (text: string) => text,
+    getThinkingBorderColor: () => (text: string) => text,
   };
 
   const editors: any[] = [];

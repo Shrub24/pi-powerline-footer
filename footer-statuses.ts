@@ -1,16 +1,19 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { themeBackgroundEscape } from "./colors.ts";
+import { SEP_DOT } from "./icons.ts";
+import { applyColor } from "./theme.ts";
+import type { ColorValue, ThemeLike } from "./types.ts";
 
 export interface StatusBlock {
   text: string;
   /** Theme token or hex colour for the block background. Unset or unresolved blocks take the rotation. */
-  color?: string;
+  color?: ColorValue;
 }
 
 type Painter = { getFgAnsi(token: string): string };
 
 const SGR = /\x1b\[[0-9;]*m/g;
-const BLOCK_FOREGROUND = "\x1b[30m";
+const BLOCK_FOREGROUND = "\x1b[1m\x1b[30m";
 const RESET = "\x1b[0m";
 // Backgrounds for blocks without a usable colour, in order.
 const ROTATION = ["accent", "success", "warning", "borderAccent", "customMessageLabel"];
@@ -57,7 +60,33 @@ export function renderStatusBlocks(blocks: StatusBlock[], width: number, theme: 
   return `${row}${foregroundOf(last)}\x1b[49m${glyph}${RESET}`;
 }
 
-/** The footer statuses line sits one blank row below the frame; no statuses means no rows at all. */
-export function footerRows(line: string | null): string[] {
+/** The compact plain join of extension statuses, each isolated from its neighbours' styling. */
+export function joinStatuses(statuses: StatusBlock[], theme: ThemeLike): string {
+  return statuses
+    .map(({ text, color }) => `\x1b[0m${color ? applyColor(theme, color, text) : text}\x1b[0m`)
+    .join(SEP_DOT);
+}
+
+/**
+ * The footer line under the rounded frame: the footer segments, then the extension statuses. Blocks
+ * style makes each one a block; plain joins them as text. Nothing renders when both are empty, and a
+ * non-empty line sits one blank row below the frame.
+ */
+export function renderFooterRows(
+  content: { segments: string[]; statuses: StatusBlock[] },
+  width: number,
+  theme: ThemeLike & Painter,
+  style: "plain" | "blocks",
+  glyph: string,
+): string[] {
+  if (style === "blocks") {
+    const blocks = [...content.segments.map((text) => ({ text })), ...content.statuses];
+    return footerRows(renderStatusBlocks(blocks, width, theme, glyph));
+  }
+  const line = [...content.segments, joinStatuses(content.statuses, theme)].filter(Boolean).join(" ");
+  return footerRows(line ? truncateToWidth(line, width, "…") : null);
+}
+
+function footerRows(line: string | null): string[] {
   return line ? ["", line] : [];
 }

@@ -3,7 +3,7 @@ import type { CostCurrencyCode } from "./currency-rates.ts";
 
 // Theme color - a pi theme color name, a custom hex color, or the rainbow effect
 export type ColorValue = ThemeColor | `#${string}` | "rainbow";
-export type ThemeLike = Pick<Theme, "fg">;
+export type ThemeLike = Pick<Theme, "fg" | "getThinkingBorderColor">;
 
 // Semantic color names for segments
 export type SemanticColor =
@@ -117,6 +117,8 @@ export interface StatusLineLayout {
   left?: StatusLineSegmentId[];
   right?: StatusLineSegmentId[];
   secondary?: StatusLineSegmentId[];
+  /** Rounded frame only: segments on the footer line under the frame, before the extension statuses. */
+  footer?: StatusLineSegmentId[];
 }
 
 export interface CustomStatusItem {

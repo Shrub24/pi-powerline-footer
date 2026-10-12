@@ -28,11 +28,11 @@ import { getAgentPath } from "./paths.ts";
 import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentOptions, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
 import { getSeparator } from "./separators.ts";
 import { extensionStatusParts, renderSegment } from "./segments.ts";
-import { footerRows, renderStatusBlocks } from "./footer-statuses.ts";
+import { renderFooterRows } from "./footer-statuses.ts";
 import { resolveThinkingLevelSelection } from "./thinking-level.ts";
 import { getGitStatus, invalidateGitStatus, invalidateGitBranch, subscribeGitUpdates } from "./git-status.ts";
 import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
-import { ansi, getFgAnsiCode } from "./colors.ts";
+import { ansi, boldText, getFgAnsiCode } from "./colors.ts";
 import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
 import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor, renderFrameBorder, renderRoundedFrame, type EditorBackendFactory, type FrameGroups } from "./editor-composition.ts";
@@ -1127,7 +1127,7 @@ function buildContentFromParts(
  * The rounded frame's segment groups. `ctx` is kept so the Vim label is rendered at paint time: it
  * changes with every mode switch, which the layout cache would otherwise serve stale.
  */
-type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[] };
+type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[]; footer: StatusLineSegmentId[] };
 
 type ResponsiveLayout = { topContent: string; secondaryLines: string[]; frame?: FrameLayout };
 
@@ -1140,15 +1140,17 @@ function renderSegmentContents(ids: StatusLineSegmentId[], ctx: SegmentContext):
 
 function computeRoundedFrameLayout(
   ctx: SegmentContext,
-  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[] },
+  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[]; footerSegments: StatusLineSegmentId[] },
 ): FrameLayout {
+  // Top and bottom segments are bold so they stay legible on the border.
   return {
     ctx,
     top: {
-      left: renderSegmentContents(segments.leftSegments, ctx),
-      right: renderSegmentContents(segments.rightSegments, ctx),
+      left: renderSegmentContents(segments.leftSegments, ctx).map(boldText),
+      right: renderSegmentContents(segments.rightSegments, ctx).map(boldText),
     },
-    bottomLeft: renderSegmentContents(segments.secondarySegments.filter((id) => id !== "vim_mode" && id !== "extension_statuses"), ctx),
+    bottomLeft: renderSegmentContents(segments.secondarySegments.filter((id) => id !== "vim_mode" && id !== "extension_statuses"), ctx).map(boldText),
+    footer: segments.footerSegments,
   };
 }
 
@@ -3080,6 +3082,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       ...mergedSegments.leftSegments,
       ...mergedSegments.rightSegments,
       ...mergedSegments.secondarySegments,
+      ...mergedSegments.footerSegments,
     ];
     let segmentCtx: SegmentContext;
     try {
@@ -3141,12 +3144,13 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     if (config.editor.frame === "rounded") {
       const frame = getResponsiveLayout(width, theme).frame;
       if (!frame) return [];
-      if (config.statusStyle === "blocks") {
-        const parts = extensionStatusParts(frame.ctx);
-        return footerRows(renderStatusBlocks(parts, width, theme, getSeparator("powerline").left));
-      }
-      const statuses = renderSegmentContents(["extension_statuses"], frame.ctx).join(" ");
-      return footerRows(statuses ? truncateToWidth(statuses, width, "…") : null);
+      return renderFooterRows(
+        { segments: renderSegmentContents(frame.footer, frame.ctx), statuses: extensionStatusParts(frame.ctx) },
+        width,
+        theme,
+        config.statusStyle,
+        getSeparator("powerline").left,
+      );
     }
 
     return [...getResponsiveLayout(width, theme).secondaryLines];

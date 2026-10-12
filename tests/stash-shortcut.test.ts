@@ -103,6 +103,7 @@ function fakeTheme() {
   return {
     fg: (_color: string, text: string) => text,
     bold: (text: string) => text,
+    getThinkingBorderColor: () => (text: string) => text,
   };
 }
 

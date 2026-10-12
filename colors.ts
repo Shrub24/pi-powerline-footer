@@ -76,6 +76,11 @@ export function themeBackgroundEscape(theme: { getFgAnsi(token: string): string 
   return colour?.replace("\x1b[38;", "\x1b[48;");
 }
 
+/** Bold text whose full resets (`ESC[0m`) inside it keep the bold on. */
+export function boldText(text: string): string {
+  return `\x1b[1m${text.split("\x1b[0m").join("\x1b[0m\x1b[1m")}\x1b[22m`;
+}
+
 // Helper to apply foreground color only (no reset - caller manages reset)
 export function fgOnly(color: ColorName, text: string): string {
   const code = getAnsiCode(color);
