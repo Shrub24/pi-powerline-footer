@@ -34,7 +34,7 @@ import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
 import { ansi, getFgAnsiCode } from "./colors.ts";
 import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
-import { getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor } from "./editor-composition.ts";
+import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor, renderFrameBorder, type EditorBackendFactory } from "./editor-composition.ts";
 import { EditorPerfProfiler, readEditorPerfOptions } from "./editor-performance.ts";
 import { CoreContextUsageCache, estimateInitialContextTokens, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
 import { isStaleExtensionContextError, shouldShowStartupWelcome } from "./lifecycle.ts";
@@ -1222,6 +1222,8 @@ function warnInvalidSegmentSettings(ctx: any): void {
 
 export default function powerlineFooter(pi: ExtensionAPI) {
   const editorPerf = new EditorPerfProfiler(readEditorPerfOptions());
+  // Owns the factory this instance installs and the foreign factory every rebuild builds on.
+  const editorFactoryTracker = createEditorFactoryTracker();
   const startupSettings = readSettings();
   config = parsePowerlineConfig(startupSettings.powerline, PRESET_NAMES);
   let resolvedShortcuts = resolveShortcutConfig(startupSettings);
@@ -3246,10 +3248,12 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     ctx.ui.setWidget("powerline-last-prompt", undefined);
 
     let autocompleteFixed = !bashModeSettings.completions;
-    const previousEditorFactory = typeof ctx.ui.getEditorComponent === "function" ? ctx.ui.getEditorComponent() : undefined;
+    const previousEditorFactory = editorFactoryTracker.capture(
+      typeof ctx.ui.getEditorComponent === "function" ? ctx.ui.getEditorComponent() : undefined,
+    );
 
-    const editorFactory = (tui: any, editorTheme: any, keybindings: any) => {
-      const previousEditor = previousEditorFactory?.(tui, editorTheme, keybindings);
+    // The default backend: Powerline's bash-mode editor, with no frame label of its own.
+    const createBackend: EditorBackendFactory = (tui, editorTheme, keybindings) => {
       const editor = new BashModeEditor(tui, editorTheme, keybindings, {
         keybindings,
         isBashModeActive: () => bashModeActive,
@@ -3285,7 +3289,15 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         },
       });
 
+      return { editor, fastRender: editorPerf.options.fastRender };
+    };
+
+    const editorFactory = editorFactoryTracker.own((tui: any, editorTheme: any, keybindings: any) => {
+      const previousEditor = previousEditorFactory?.(tui, editorTheme, keybindings);
+      const { editor, fastRender, getFrameLabel } = createBackend(tui, editorTheme, keybindings);
+
       let installingPowerlineAutocompleteProvider = false;
+      let powerlineAutocompleteProviderInstalled = false;
       // Pi assigns onSubmit after this factory returns and calls it from every submit path, so the delay wraps it here.
       let piSubmit: ((text: string) => unknown) | undefined;
       Object.defineProperty(editor, "onSubmit", {
@@ -3306,6 +3318,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           return;
         }
 
+        // Pi is installing a provider of its own: drop the stale wrapper so attach wraps this one.
+        powerlineAutocompleteProviderInstalled = false;
         originalSetAutocompleteProvider(passAutocompleteProviderThroughPreviousEditor(provider, previousEditor));
         attachAutocompleteProvider();
       };
@@ -3316,7 +3330,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
       const attachAutocompleteProvider = (): boolean => {
         if (!bashModeSettings.completions) return false;
-        if (editor.hasWrappedProvider()) return true;
+        if (powerlineAutocompleteProviderInstalled) return true;
         const defaultProvider = getInstalledAutocompleteProvider();
         if (!defaultProvider) return false;
 
@@ -3324,12 +3338,13 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         const oneOffBashProvider = new OneOffBashAutocompleteProvider();
         installingPowerlineAutocompleteProvider = true;
         try {
-          editor.installAutocompleteProvider(
+          editor.setAutocompleteProvider(
             new ModeAwareAutocompleteProvider(defaultProvider, bashProvider, oneOffBashProvider, () => bashModeActive),
           );
         } finally {
           installingPowerlineAutocompleteProvider = false;
         }
+        powerlineAutocompleteProviderInstalled = true;
         return true;
       };
 
@@ -3446,7 +3461,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
               : originalRender(width);
           }
 
-          if (editorPerf.options.fastRender) {
+          if (fastRender) {
             const fastLines = editorPerf.options.enabled
               ? editorPerf.measure("editor.render.fast-probe", () => renderFastPowerlineEditor(editor, width, {
                   bashModeActive,
@@ -3489,8 +3504,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             }
           }
 
+          const colorBorder = (text: string) => colorEditorBorder(editor, text);
           const result: string[] = [];
-          result.push(" " + colorEditorBorder(editor, "─".repeat(width - 2)));
+          result.push(renderFrameBorder(width, colorBorder));
 
           for (let i = 1; i < bottomBorderIndex; i++) {
             const prefix = i === 1 ? promptPrefix : contPrefix;
@@ -3501,7 +3517,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             result.push(`${promptPrefix}${" ".repeat(contentWidth)}`);
           }
 
-          result.push(" " + colorEditorBorder(editor, "─".repeat(width - 2)));
+          result.push(renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));
 
           for (let i = bottomBorderIndex + 1; i < lines.length; i++) {
             result.push(lines[i] || "");
@@ -3516,7 +3532,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       };
 
       return editor;
-    };
+    });
 
     ctx.ui.setEditorComponent(editorFactory);
 
