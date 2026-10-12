@@ -1,3 +1,4 @@
+import { completeSpeedSample, noteSpeedFirstToken, startSpeedTiming, type SpeedSample, type SpeedTiming } from "./speed.ts";
 import {
   copyToClipboard,
   type ExtensionAPI,
@@ -1301,6 +1302,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let getThinkingLevelFn: (() => string) | null = null;
   let currentThinkingLevel: string | null = null;
   let liveAssistantUsage: SessionAssistantUsage | null = null;
+  // The request in flight, and the latest completed request's speed (kept across aborted requests).
+  let speedTiming: SpeedTiming | null = null;
+  let lastSpeed: SpeedSample | undefined;
   let approximateContextUsage: CoreContextUsage | null = null;
   let isStreaming = false;
   let tuiRef: any = null;
@@ -2168,7 +2172,14 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     currentCtx = ctx;
   });
 
+  pi.on("before_provider_request", () => {
+    speedTiming = startSpeedTiming(performance.now());
+  });
+
   pi.on("message_update", async (event, ctx) => {
+    if (event.message.role === "assistant" && speedTiming) {
+      speedTiming = noteSpeedFirstToken(speedTiming, performance.now());
+    }
     if (isSessionAssistantMessage(event.message)
       && event.message.stopReason !== "error"
       && event.message.stopReason !== "aborted"
@@ -2196,6 +2207,14 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         liveAssistantUsage = null;
       } else if (getUsageTokenTotal(event.message.usage) > 0) {
         liveAssistantUsage = event.message.usage;
+      }
+    }
+    if (event.message.role === "assistant" && speedTiming) {
+      const sample = completeSpeedSample(speedTiming, event.message, performance.now());
+      speedTiming = null;
+      if (sample) {
+        lastSpeed = sample;
+        layoutDirty = true;
       }
     }
     requestImmediateStatusRender({ deferDuringTyping: false });
@@ -3026,6 +3045,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       sessionName: ctx.sessionManager?.getSessionName?.(),
       cwd: ctx.cwd,
       usageStats: { input, output, cacheRead, cacheWrite, cost, subagentCost },
+      speed: lastSpeed,
       contextTokens,
       contextPercent,
       contextWindow,

@@ -1,3 +1,4 @@
+import type { SpeedSample, SpeedShow } from "./speed.ts";
 import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import type { CostCurrencyCode } from "./currency-rates.ts";
 
@@ -42,6 +43,7 @@ export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
   "token_in",
   "token_out",
   "tokens",
+  "speed",
   "token_total",
   "cost",
   "context_pct",
@@ -109,6 +111,7 @@ export interface StatusLineSegmentOptions {
   cost?: { subscriptionDisplay?: "subscription" | "reported-cost" | "both"; currency?: CostCurrencyCode };
   context?: { format?: "full" | "percent" };
   cache_read?: { format?: "tokens" | "percent" | "both" };
+  speed?: { show?: SpeedShow };
 }
 
 export type CustomItemPosition = "left" | "right" | "secondary";
@@ -236,6 +239,9 @@ export interface SegmentContext {
   // Git
   git: GitStatus;
   
+  /** The latest completed request's generation speed; absent until one completes. */
+  speed?: SpeedSample;
+
   // Extension statuses
   extensionStatuses: ReadonlyMap<string, string>;
   hiddenExtensionStatusKeys: ReadonlySet<string>;

@@ -4,6 +4,7 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { BuiltinStatusLineSegmentId, ColorValue, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId, ThemeLike } from "./types.ts";
 import { boldText } from "./colors.ts";
 import { joinStatuses } from "./footer-statuses.ts";
+import { speedText } from "./speed.ts";
 import { formatExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
 import { fg, applyColor } from "./theme.ts";
 import { getIcons, SEP_DOT, getThinkingText } from "./icons.ts";
@@ -283,6 +284,16 @@ const tokenOutSegment: StatusLineSegment = {
   },
 };
 
+// Generation speed of the latest completed request: tokens per second, then time to first token.
+const speedSegment: StatusLineSegment = {
+  id: "speed",
+  render(ctx) {
+    const text = speedText(ctx.speed, ctx.options.speed?.show ?? "both");
+    if (!text) return { content: "", visible: false };
+    return { content: color(ctx, "tokens", `${getIcons().speed} ${text}`), visible: true };
+  },
+};
+
 // Input and output together, unlabelled: ↑ is what was sent, ↓ what came back.
 const tokensSegment: StatusLineSegment = {
   id: "tokens",
@@ -543,6 +554,7 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   token_in: tokenInSegment,
   token_out: tokenOutSegment,
   tokens: tokensSegment,
+  speed: speedSegment,
   token_total: tokenTotalSegment,
   cost: costSegment,
   context_pct: contextPctSegment,

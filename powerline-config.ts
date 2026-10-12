@@ -401,6 +401,12 @@ function normalizeSegmentOptions(raw: Record<string, unknown>): StatusLineSegmen
     };
   }
 
+  if (isRecord(raw.speed)) {
+    options.speed = {
+      ...(raw.speed.show === "both" || raw.speed.show === "rate" || raw.speed.show === "ttft" ? { show: raw.speed.show } : {}),
+    };
+  }
+
   return options;
 }
 
