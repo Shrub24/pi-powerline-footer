@@ -661,12 +661,22 @@ function isCustomSegmentId(id: StatusLineSegmentId): id is `custom:${string}` {
   return id.startsWith("custom:");
 }
 
+/** One extension status placed in the footer, formatted by its statusFormats rule, coloured as a pill. */
+function renderExtensionStatus(statusKey: string, ctx: SegmentContext): RenderedSegment {
+  const rule = ctx.statusFormats.get(statusKey);
+  const text = formatExtensionStatus(ctx.extensionStatuses.get(statusKey) ?? "", rule);
+  return text ? { content: text, visible: true, color: rule?.color } : { content: "", visible: false };
+}
+
 export function renderSegment(id: StatusLineSegmentId, ctx: SegmentContext): RenderedSegment {
   if (isCustomSegmentId(id)) {
     return renderCustomSegment(id, ctx);
   }
+  if (id.startsWith("status:")) {
+    return renderExtensionStatus(id.slice("status:".length), ctx);
+  }
 
-  const segment = SEGMENTS[id];
+  const segment = SEGMENTS[id as BuiltinStatusLineSegmentId];
   if (!segment) {
     return { content: "", visible: false };
   }

@@ -49,7 +49,7 @@ export function speedText(sample: SpeedSample | undefined, show: SpeedShow): str
   const parts: string[] = [];
   if (show !== "ttft" && sample.tokensPerSec !== undefined) parts.push(`${formatRate(sample.tokensPerSec)} t/s`);
   if (show !== "rate") parts.push(`${sample.ttftSec.toFixed(1)}s`);
-  return parts.length > 0 ? parts.join(" · ") : undefined;
+  return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 // Whole tokens per second below 100, then the nearest 5: the last digit is noise at high rates.

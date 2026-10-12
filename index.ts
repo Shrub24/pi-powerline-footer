@@ -27,7 +27,7 @@ import { matchHistoryEntries, readGlobalShellHistory, readProjectHistory, append
 import type { BashModeSettings } from "./bash-mode/types.ts";
 import { getPreset, PRESETS } from "./presets.ts";
 import { getAgentPath } from "./paths.ts";
-import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentOptions, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
+import { collectHiddenExtensionStatusKeys, footerStatusKeys, getNotificationExtensionStatuses, mergeSegmentOptions, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
 import { getSeparator } from "./separators.ts";
 import { extensionStatusParts, footerGroupItem, renderSegment } from "./segments.ts";
 import { renderFooterRows } from "./footer-statuses.ts";
@@ -3041,7 +3041,11 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       : { branch: null, staged: 0, unstaged: 0, untracked: 0 };
     const extensionStatuses = footerDataRef?.getExtensionStatuses() ?? new Map();
     const customItemsById = new Map(config.customItems.map((item) => [item.id, item]));
-    const hiddenExtensionStatusKeys = collectHiddenExtensionStatusKeys(config.customItems);
+    // Statuses placed in the rounded footer render there as items, so the trailing and secondary views skip them.
+    const hiddenExtensionStatusKeys = new Set([
+      ...collectHiddenExtensionStatusKeys(config.customItems),
+      ...(config.editor.frame === "rounded" ? footerStatusKeys(config.layout?.footer) : []),
+    ]);
 
     // Check if using OAuth subscription
     const usingSubscription = ctx.model

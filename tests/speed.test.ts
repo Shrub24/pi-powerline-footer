@@ -8,7 +8,7 @@ const timed = () => noteSpeedFirstToken(startSpeedTiming(0), 500);
 test("rate is output tokens over the window from first token to message end, and ttft is start to first token", () => {
   const sample = completeSpeedSample(timed(), { stopReason: "stop", usage: { output: 100 } }, 2500);
   assert.deepEqual(sample, { ttftSec: 0.5, tokensPerSec: 50 });
-  assert.equal(speedText(sample, "both"), "50 t/s · 0.5s");
+  assert.equal(speedText(sample, "both"), "50 t/s 0.5s");
   assert.equal(speedText(sample, "rate"), "50 t/s");
   assert.equal(speedText(sample, "ttft"), "0.5s");
 });

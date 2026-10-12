@@ -65,7 +65,8 @@ export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
 export type BuiltinStatusLineSegmentId = typeof BUILTIN_STATUS_LINE_SEGMENT_IDS[number];
 
 // Segment identifiers (built-in + dynamically registered custom items)
-export type StatusLineSegmentId = BuiltinStatusLineSegmentId | `custom:${string}`;
+/** `status:<key>` renders one extension status. Only `layout.footer` entries produce it, so it is valid nowhere else. */
+export type StatusLineSegmentId = BuiltinStatusLineSegmentId | `custom:${string}` | `status:${string}`;
 
 // Separator styles
 export type StatusLineSeparatorStyle =

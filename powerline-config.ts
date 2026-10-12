@@ -245,7 +245,7 @@ function normalizeLayout(
   const customItemIds = new Set(customItems.map((item) => item.id));
   const globallyPlaced = new Set<StatusLineSegmentId>();
 
-  const place = (row: string, entry: unknown, seen: Set<StatusLineSegmentId>): StatusLineSegmentId | undefined => {
+  const place = (row: string, entry: unknown, seen: Set<string>): StatusLineSegmentId | undefined => {
     const segmentId = normalizeStatusLineSegmentId(entry, customItemIds);
     if (!segmentId) {
       invalidLayoutSegments.push(`${row}:${typeof entry === "string" ? entry.trim() : String(entry)}`);
@@ -268,11 +268,24 @@ function normalizeLayout(
     layout[row] = entries.flatMap((entry) => place(row, entry, seen) ?? []);
   }
 
-  // A footer entry is one segment or an array of them; an array is a group that renders as one pill.
+  // A footer entry is one segment, a `status:<key>` or an array of them; an array is a group that renders as one pill.
   if (Array.isArray(raw.footer)) {
-    const seen = new Set<StatusLineSegmentId>();
+    const seen = new Set<string>();
+    const footerMember = (member: unknown): StatusLineSegmentId | undefined => {
+      const text = typeof member === "string" ? member.trim() : "";
+      if (!text.startsWith("status:")) return place("footer", member, seen);
+      const statusKey = text.slice("status:".length).trim();
+      if (!statusKey) {
+        invalidLayoutSegments.push(`footer:${text}`);
+        return undefined;
+      }
+      const id = `status:${statusKey}` as const;
+      if (seen.has(id)) return undefined;
+      seen.add(id);
+      return id;
+    };
     layout.footer = raw.footer.flatMap((entry) => {
-      const group = (Array.isArray(entry) ? entry : [entry]).flatMap((member) => place("footer", member, seen) ?? []);
+      const group = (Array.isArray(entry) ? entry : [entry]).flatMap((member) => footerMember(member) ?? []);
       return group.length > 0 ? [group] : [];
     });
   }
@@ -600,6 +613,15 @@ export function nextPowerlineSettingWithOptions(
     return { preset: currentPreset, ...updates };
   }
   return { ...existingPowerlineSetting, ...updates };
+}
+
+/** The extension status keys placed in the footer as `status:<key>`; they show there and nowhere else as trailing statuses. */
+export function footerStatusKeys(footer: readonly (readonly StatusLineSegmentId[])[] | undefined): Set<string> {
+  const keys = new Set<string>();
+  for (const id of (footer ?? []).flat()) {
+    if (id.startsWith("status:")) keys.add(id.slice("status:".length));
+  }
+  return keys;
 }
 
 export function collectHiddenExtensionStatusKeys(customItems: readonly CustomStatusItem[]): Set<string> {
