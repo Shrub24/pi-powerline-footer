@@ -9,7 +9,9 @@
     "*.json",
     "!progress.md",
     "bash-mode/**/*.ts",
-    "queue/**/*.ts"
+    "queue/**/*.ts",
+    "vim/*.ts",
+    "vim/LICENSE"
   ],
   "keywords": [
     "pi-package",
@@ -27,7 +29,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/**/*.test.ts"
+    "typecheck:vim": "tsc --noEmit -p vim",
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "test:vim": "node --import tsx/esm --test --test-skip-pattern='keeps the software cursor when focused render has no cursor marker' 'vim/test/**/*.test.ts' 'vim-tests/**/*.test.ts'"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": ">=0.81.0",
@@ -39,6 +43,7 @@
     "@earendil-works/pi-coding-agent": "^0.84.4",
     "@earendil-works/pi-tui": "^0.84.4",
     "@types/node": "24.13.3",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3"
   },
   "pi": {
