@@ -53,6 +53,7 @@ export const BUILTIN_STATUS_LINE_SEGMENT_IDS = [
   "cache_write",
   "thinking",
   "extension_statuses",
+  "vim_mode",
 ] as const;
 
 export type BuiltinStatusLineSegmentId = typeof BUILTIN_STATUS_LINE_SEGMENT_IDS[number];
@@ -200,6 +201,8 @@ export interface SegmentContext {
   contextPercent: number | null;
   contextWindow: number;
   contextApproximate: boolean;
+  /** The Vim backend's mode label, fitted to the width handed in; absent when no backend supplies one. */
+  frameLabel?: (width: number) => string | undefined;
   autoCompactEnabled: boolean;
   customCompactionEnabled: boolean;
   usingSubscription: boolean;

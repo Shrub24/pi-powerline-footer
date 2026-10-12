@@ -34,7 +34,7 @@ import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
 import { ansi, getFgAnsiCode } from "./colors.ts";
 import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
-import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor, renderFrameBorder, type EditorBackendFactory } from "./editor-composition.ts";
+import { createEditorFactoryTracker, getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor, renderFrameBorder, renderRoundedFrame, type EditorBackendFactory, type FrameGroups } from "./editor-composition.ts";
 import type { VimRuntime } from "./vim-editor.ts";
 import { EditorPerfProfiler, readEditorPerfOptions } from "./editor-performance.ts";
 import { CoreContextUsageCache, estimateInitialContextTokens, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
@@ -91,7 +91,7 @@ let config: PowerlineConfig = {
   invalidSecondaryOverflow: null,
   welcome: true,
   stashSharpSShortcut: false,
-  editor: { mode: "default", invalidMode: null, vim: {} },
+  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, vim: {} },
   queue: { compactPromptMode: "queue" },
   sendDelayMs: 0,
   autoFollowUp: false,
@@ -1118,7 +1118,34 @@ function buildContentFromParts(
   return " " + parts.join(` ${sepAnsi}${sep}${ansi.reset} `) + ansi.reset + " ";
 }
 
-type ResponsiveLayout = { topContent: string; secondaryLines: string[] };
+/**
+ * The rounded frame's segment groups. `ctx` is kept so the Vim label is rendered at paint time: it
+ * changes with every mode switch, which the layout cache would otherwise serve stale.
+ */
+type FrameLayout = { ctx: SegmentContext; top: FrameGroups; bottomLeft: string[] };
+
+type ResponsiveLayout = { topContent: string; secondaryLines: string[]; frame?: FrameLayout };
+
+function renderSegmentContents(ids: StatusLineSegmentId[], ctx: SegmentContext): string[] {
+  return ids.flatMap((id) => {
+    const rendered = renderSegment(id, ctx);
+    return rendered.visible && rendered.content ? [rendered.content] : [];
+  });
+}
+
+function computeRoundedFrameLayout(
+  ctx: SegmentContext,
+  segments: { leftSegments: StatusLineSegmentId[]; rightSegments: StatusLineSegmentId[]; secondarySegments: StatusLineSegmentId[] },
+): FrameLayout {
+  return {
+    ctx,
+    top: {
+      left: renderSegmentContents(segments.leftSegments, ctx),
+      right: renderSegmentContents(segments.rightSegments, ctx),
+    },
+    bottomLeft: renderSegmentContents(segments.secondarySegments.filter((id) => id !== "vim_mode"), ctx),
+  };
+}
 
 /**
  * Responsive segment layout - fits segments into top bar, overflows to secondary row.
@@ -1235,6 +1262,12 @@ function warnInvalidSegmentSettings(ctx: any): void {
     console.warn(`[powerline-footer] ${message}`);
     if (ctx.hasUI) ctx.ui.notify(message, "warning");
   }
+
+  if (config.editor.invalidFrame !== null) {
+    const message = `Ignoring invalid powerline editor frame: ${JSON.stringify(config.editor.invalidFrame)}`;
+    console.warn(`[powerline-footer] ${message}`);
+    if (ctx.hasUI) ctx.ui.notify(message, "warning");
+  }
 }
 
 export default function powerlineFooter(pi: ExtensionAPI) {
@@ -1276,6 +1309,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let stashedEditorText: string | null = null;
   let stashedPromptHistory: string[] = readPersistedStashHistory();
   let currentEditor: any = null;
+  let currentFrameLabel: ((width: number) => string | undefined) | undefined;
   let bashModeActive = false;
   // Vim mode only: resolved once per session, because loading the vendored tree is the one part of
   // the editor setup that cannot happen synchronously.
@@ -1971,6 +2005,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     liveAssistantUsage = null;
     tuiRef = null;
     currentEditor = null;
+    currentFrameLabel = undefined;
     resetLayoutCache();
   });
 
@@ -2674,6 +2709,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           footerDataRef = null;
           tuiRef = null;
           currentEditor = null;
+          currentFrameLabel = undefined;
           statusRenderScheduler.cancel();
           resetLayoutCache();
           ctx.ui.notify("Powerline disabled", "info");
@@ -2994,6 +3030,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       extensionStatuses,
       hiddenExtensionStatusKeys,
       customItemsById,
+      frameLabel: (width) => currentFrameLabel?.(width),
       options: segmentOptions,
       theme,
       colors,
@@ -3048,7 +3085,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     }
 
     lastLayoutWidth = width;
-    lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, allSegmentIds, width);
+    lastLayoutResult = config.editor.frame === "rounded"
+      ? { topContent: "", secondaryLines: [], frame: computeRoundedFrameLayout(segmentCtx, mergedSegments) }
+      : computeResponsiveLayout(segmentCtx, presetDef, allSegmentIds, width);
     lastLayoutTimestamp = now;
     layoutDirty = false;
     forceNextLayoutRecompute = false;
@@ -3075,14 +3114,16 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   }
 
   function renderPowerlinePrimaryLines(width: number, theme: Theme): string[] {
-    if (!currentCtx) return [];
+    // The rounded frame carries the top segments in its own border.
+    if (!currentCtx || config.editor.frame === "rounded") return [];
 
     const layout = getResponsiveLayout(width, theme);
     return layout.topContent ? [layout.topContent] : [];
   }
 
   function renderPowerlineSecondaryLines(width: number, theme: Theme): string[] {
-    if (!currentCtx) return [];
+    // The rounded frame carries the secondary segments in its bottom border.
+    if (!currentCtx || config.editor.frame === "rounded") return [];
 
     return [...getResponsiveLayout(width, theme).secondaryLines];
   }
@@ -3401,6 +3442,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       };
 
       currentEditor = editor;
+      currentFrameLabel = getFrameLabel;
       trackPromptHistory(editor);
       restorePromptHistory(editor);
       attachAutocompleteProvider();
@@ -3513,7 +3555,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
               : originalRender(width);
           }
 
-          if (fastRender) {
+          const rounded = config.editor.frame === "rounded";
+          if (fastRender && !rounded) {
             const fastLines = editorPerf.options.enabled
               ? editorPerf.measure("editor.render.fast-probe", () => renderFastPowerlineEditor(editor, width, {
                   bashModeActive,
@@ -3538,9 +3581,12 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           const promptGlyph = bashModeActive ? "$" : ">";
           const promptColor = ansi.getFgAnsi(200, 200, 200);
           const prompt = `${promptColor}${promptGlyph}${ansi.reset}`;
-          const promptPrefix = ` ${prompt} `;
-          const contPrefix = "   ";
-          const contentWidth = Math.max(1, width - 3);
+          const colorBorder = (text: string) => colorEditorBorder(editor, text);
+          // Rounded rows: the left rail, space, prompt glyph and space take 4 columns; a space and the right rail take 2.
+          const rail = rounded ? colorBorder("│") : "";
+          const promptPrefix = rounded ? `${rail} ${prompt} ` : ` ${prompt} `;
+          const contPrefix = rounded ? `${rail}   ` : "   ";
+          const contentWidth = Math.max(1, width - (rounded ? 6 : 3));
           const lines = editorPerf.options.enabled
             ? editorPerf.measure("editor.render.base", () => originalRender(contentWidth))
             : originalRender(contentWidth);
@@ -3556,23 +3602,43 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             }
           }
 
-          const colorBorder = (text: string) => colorEditorBorder(editor, text);
+          const bodyRow = (prefix: string, text: string): string => {
+            if (!rounded) return `${prefix}${text}`;
+            return `${prefix}${text}${" ".repeat(Math.max(0, contentWidth - visibleWidth(text)))} ${rail}`;
+          };
+
+          const frame = rounded ? getResponsiveLayout(width, ctx.ui.theme).frame : undefined;
+          const frameRows = rounded
+            ? renderRoundedFrame({
+                width,
+                colorBorder,
+                separator: `${getFgAnsiCode("sep")}·${ansi.reset}`,
+                top: frame?.top ?? { left: [], right: [] },
+                bottom: {
+                  left: frame?.bottomLeft ?? [],
+                  right: frame ? renderSegmentContents(["vim_mode"], frame.ctx) : [],
+                },
+              })
+            : null;
+
           const result: string[] = [];
-          result.push(renderFrameBorder(width, colorBorder));
+          result.push(frameRows ? frameRows.top : renderFrameBorder(width, colorBorder));
 
           for (let i = 1; i < bottomBorderIndex; i++) {
             const prefix = i === 1 ? promptPrefix : contPrefix;
-            result.push(`${prefix}${lines[i] || ""}`);
+            result.push(bodyRow(prefix, lines[i] || ""));
           }
 
           if (bottomBorderIndex === 1) {
-            result.push(`${promptPrefix}${" ".repeat(contentWidth)}`);
+            result.push(bodyRow(promptPrefix, " ".repeat(contentWidth)));
           }
 
-          result.push(renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));
+          result.push(frameRows ? frameRows.bottom : renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));
 
+          // Autocomplete rows sit under the body column, outside the frame.
+          const autocompleteIndent = rounded ? "    " : "";
           for (let i = bottomBorderIndex + 1; i < lines.length; i++) {
-            result.push(lines[i] || "");
+            result.push(`${autocompleteIndent}${lines[i] || ""}`);
           }
 
           return result;

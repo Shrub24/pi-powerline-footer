@@ -510,6 +510,15 @@ const extensionStatusesSegment: StatusLineSegment = {
   },
 };
 
+/** The Vim mode label. Read live through the backend, so it is never a stale snapshot. */
+const vimModeSegment: StatusLineSegment = {
+  id: "vim_mode",
+  render(ctx) {
+    const label = ctx.frameLabel?.(Number.POSITIVE_INFINITY);
+    return label ? { content: label, visible: true } : { content: "", visible: false };
+  },
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Segment Registry
 // ═══════════════════════════════════════════════════════════════════════════
@@ -535,6 +544,7 @@ export const SEGMENTS: Record<BuiltinStatusLineSegmentId, StatusLineSegment> = {
   cache_read: cacheReadSegment,
   cache_write: cacheWriteSegment,
   extension_statuses: extensionStatusesSegment,
+  vim_mode: vimModeSegment,
 };
 
 function renderCustomSegment(id: `custom:${string}`, ctx: SegmentContext): RenderedSegment {

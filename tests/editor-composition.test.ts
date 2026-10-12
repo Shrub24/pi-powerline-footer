@@ -7,6 +7,7 @@ import {
   isPowerlineEditorFactory,
   passAutocompleteProviderThroughPreviousEditor,
   renderFrameBorder,
+  renderRoundedFrame,
   type EditorFactory,
 } from "../editor-composition.ts";
 
@@ -104,6 +105,26 @@ test("the frame border carries a backend label inside the frame without changing
   const clipped = renderFrameBorder(20, colorBorder, "x".repeat(50));
   assert.equal(strip(clipped), ` ${"x".repeat(18)}`);
   assert.equal(visibleWidth(clipped), 19);
+});
+
+test("the rounded frame keeps whole segments: the top fills left first, the bottom reserves its label", () => {
+  const plain = (text: string) => text;
+  const frame = (width: number, top: { left: string[]; right: string[] }, bottom: { left: string[]; right: string[] }) =>
+    renderRoundedFrame({ width, colorBorder: plain, separator: "\u00b7", top, bottom });
+
+  // The right group keeps only the segment that still fits after the left group.
+  const roomy = frame(30, { left: ["model", "path", "git"], right: ["cost", "ctx"] }, { left: [], right: [] });
+  assert.equal(roomy.top, "\u256d\u2500 model \u00b7 path \u00b7 git \u2500 ctx \u2500\u256e");
+  assert.equal(visibleWidth(roomy.top), 30);
+
+  // A tight top keeps the left group's first segment and drops the rest of it.
+  const tight = frame(16, { left: ["model", "path", "git"], right: ["cost", "ctx"] }, { left: [], right: [] });
+  assert.equal(tight.top, "\u256d\u2500 model  ctx \u2500\u256e");
+
+  // The Vim label is reserved before the bottom's secondary segments, so the segments give way.
+  const labelled = frame(20, { left: [], right: [] }, { left: ["extension"], right: [" NORMAL "] });
+  assert.equal(labelled.bottom, "\u2570" + "\u2500".repeat(7) + "  NORMAL  " + "\u2500\u256f");
+  assert.equal(visibleWidth(labelled.bottom), 20);
 });
 
 test("a Powerline factory installed before a reload is recognised and never adopted", () => {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
+import { visibleWidth, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import type { EditorFactory } from "../editor-composition.ts";
 import { vendorSeamMembers } from "../vim-editor.ts";
 import { ModalEditor } from "../vim/index.ts";
@@ -290,6 +290,27 @@ test("persistent bash mode is refused in Vim mode and one-off !command completio
   const signal = AbortSignal.abort();
   assert.equal(installed.shouldTriggerFileCompletion(["!ls src/"], 0, 8), true);
   assert.deepEqual(await installed.getSuggestions(["@sr"], 0, 3, { signal }), { items: [], prefix: "@sr" });
+});
+
+test("the rounded frame carries the segments on its top rule and the live Vim label on its bottom rule", async (t) => {
+  const h = await vimHarness(t, { editor: { mode: "vim", frame: "rounded" } });
+  const editor = h.currentEditor();
+  const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+
+  const insertFrame = plain(h.render());
+  assert.equal(insertFrame.length, 3, "top rule, one body row and bottom rule");
+  assert.ok(insertFrame[0]!.startsWith("\u256d") && insertFrame[0]!.endsWith("\u256e"));
+  assert.match(insertFrame[0]!, /Test model/);
+  assert.ok(insertFrame[1]!.startsWith("\u2502 > ") && insertFrame[1]!.endsWith(" \u2502"));
+  assert.ok(insertFrame.at(-1)!.startsWith("\u2570") && insertFrame.at(-1)!.endsWith("\u256f"));
+  assert.match(insertFrame.at(-1)!, / INSERT /);
+  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), [FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH]);
+
+  // The label is read at paint time, so a mode switch shows without any layout change.
+  sendKeys(editor, ["\x1b"]);
+  const normalFrame = plain(h.render());
+  assert.match(normalFrame.at(-1)!, / NORMAL /);
+  assert.doesNotMatch(normalFrame.at(-1)!, / INSERT /);
 });
 
 test("the Vim backend leaves the frame border in Pi's colour", async (t) => {

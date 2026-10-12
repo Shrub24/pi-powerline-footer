@@ -6,6 +6,7 @@ import type { ColorValue, CustomItemPosition, CustomStatusItem, PowerlinePlaceme
 export type CompactPromptMode = "queue" | "native";
 export type SecondaryOverflow = "drop" | "wrap";
 export type EditorMode = "default" | "vim";
+export type EditorFrame = "default" | "rounded";
 
 export interface EditorVimModeColors {
   insert?: string;
@@ -30,6 +31,8 @@ export interface EditorVimSettings {
 export interface EditorConfig {
   mode: EditorMode;
   invalidMode: string | null;
+  frame: EditorFrame;
+  invalidFrame: string | null;
   vim: EditorVimSettings;
 }
 
@@ -274,6 +277,20 @@ function normalizeEditorMode(value: unknown): { mode: EditorMode; invalidMode: s
   };
 }
 
+function normalizeEditorFrame(value: unknown): { frame: EditorFrame; invalidFrame: string | null } {
+  if (value === undefined) return { frame: "default", invalidFrame: null };
+
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "default" || normalized === "rounded") {
+    return { frame: normalized, invalidFrame: null };
+  }
+
+  return {
+    frame: "default",
+    invalidFrame: typeof value === "string" ? value.trim() : String(value),
+  };
+}
+
 function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
   if (!isRecord(raw)) return undefined;
 
@@ -288,12 +305,15 @@ function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
 
 function normalizeEditor(value: unknown, globalValue: unknown): EditorConfig {
   const { mode, invalidMode } = normalizeEditorMode(isRecord(value) ? value.mode : undefined);
+  const { frame, invalidFrame } = normalizeEditorFrame(isRecord(value) ? value.frame : undefined);
   const vim = isRecord(value) && isRecord(value.vim) ? value.vim : {};
   const globalVim = isRecord(globalValue) && isRecord(globalValue.vim) ? globalValue.vim : {};
 
   return {
     mode,
     invalidMode,
+    frame,
+    invalidFrame,
     vim: {
       clipboardMirror: vim.clipboardMirror,
       exCommand: vim.exCommand,
@@ -414,7 +434,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     invalidSecondaryOverflow: null,
     welcome: true,
     stashSharpSShortcut: false,
-    editor: { mode: "default", invalidMode: null, vim: {} },
+    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, vim: {} },
     queue: { compactPromptMode: "queue" },
     sendDelayMs: 0,
     autoFollowUp: false,

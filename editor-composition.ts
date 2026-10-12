@@ -27,6 +27,63 @@ export function renderFrameBorder(width: number, colorBorder: (text: string) => 
   return ` ${colorBorder("─".repeat(Math.max(0, innerWidth - visibleWidth(fitted))))}${fitted}`;
 }
 
+export interface FrameGroups {
+  left: string[];
+  right: string[];
+}
+
+// The two corners and the rule beside each corner; a group is padded by one space on each side.
+const FRAME_CHROME_WIDTH = 4;
+
+function groupWidth(parts: string[], separator: string): number {
+  return parts.length === 0 ? 0 : visibleWidth(parts.join(` ${separator} `)) + 2;
+}
+
+/** Keeps whole parts, in order, from one end while the group still fits the budget. */
+function fitGroup(parts: string[], budget: number, separator: string, fromEnd = false): string[] {
+  let kept: string[] = [];
+  for (const part of fromEnd ? [...parts].reverse() : parts) {
+    const next = fromEnd ? [part, ...kept] : [...kept, part];
+    if (groupWidth(next, separator) > budget) break;
+    kept = next;
+  }
+  return kept;
+}
+
+/**
+ * The rounded frame's top and bottom rules. The top fills from its left group, so the right group
+ * keeps whatever space remains. The bottom reserves its right group (the Vim label) first, so the
+ * label wins when space is short.
+ */
+export function renderRoundedFrame(options: {
+  width: number;
+  colorBorder: (text: string) => string;
+  separator: string;
+  top: FrameGroups;
+  bottom: FrameGroups;
+}): { top: string; bottom: string } {
+  const { width, colorBorder, separator } = options;
+  const budget = width - FRAME_CHROME_WIDTH;
+
+  const topLeft = fitGroup(options.top.left, budget, separator);
+  const topRight = fitGroup(options.top.right, budget - groupWidth(topLeft, separator), separator, true);
+
+  const bottomRight = fitGroup(options.bottom.right, budget, separator, true);
+  const bottomLeft = fitGroup(options.bottom.left, budget - groupWidth(bottomRight, separator), separator);
+
+  const rule = (open: string, close: string, left: string[], right: string[]): string => {
+    const fill = budget - groupWidth(left, separator) - groupWidth(right, separator);
+    const leftText = left.length > 0 ? ` ${left.join(` ${separator} `)} ` : "";
+    const rightText = right.length > 0 ? ` ${right.join(` ${separator} `)} ` : "";
+    return colorBorder(`${open}─`) + leftText + colorBorder("─".repeat(fill)) + rightText + colorBorder(`─${close}`);
+  };
+
+  return {
+    top: rule("╭", "╮", topLeft, topRight),
+    bottom: rule("╰", "╯", bottomLeft, bottomRight),
+  };
+}
+
 const POWERLINE_EDITOR_FACTORY = Symbol.for("pi-powerline-footer.editorFactory");
 
 /** Recognises a factory Powerline installed itself, including one installed before a reload. */
