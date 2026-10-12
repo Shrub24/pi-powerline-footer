@@ -1,7 +1,7 @@
 import { hostname as osHostname } from "node:os";
 import { basename } from "node:path";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { BuiltinStatusLineSegmentId, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId } from "./types.ts";
+import type { BuiltinStatusLineSegmentId, ColorValue, RenderedSegment, SegmentContext, SemanticColor, StatusLineSegment, StatusLineSegmentId } from "./types.ts";
 import { formatExtensionStatus, normalizeExtensionStatusValue } from "./powerline-config.ts";
 import { fg, applyColor } from "./theme.ts";
 import { getIcons, SEP_DOT, getThinkingText } from "./icons.ts";
@@ -505,25 +505,29 @@ function orderStatusKeys(keys: Iterable<string>, order: readonly string[]): stri
   return [...keys].sort((a, b) => (rank.get(a) ?? unlisted) - (rank.get(b) ?? unlisted));
 }
 
+/**
+ * The extension statuses that show in the footer, formatted and ordered. Skips statuses elevated into
+ * dedicated custom segments, and empty ones after formatting, so an empty value never leaves a separator.
+ */
+export function extensionStatusParts(ctx: Pick<SegmentContext, "extensionStatuses" | "hiddenExtensionStatusKeys" | "statusFormats" | "statusOrder">): Array<{ text: string; color?: ColorValue }> {
+  const parts: Array<{ text: string; color?: ColorValue }> = [];
+  for (const statusKey of orderStatusKeys(ctx.extensionStatuses.keys(), ctx.statusOrder)) {
+    if (ctx.hiddenExtensionStatusKeys.has(statusKey)) continue;
+    const rule = ctx.statusFormats.get(statusKey);
+    const text = formatExtensionStatus(ctx.extensionStatuses.get(statusKey) ?? "", rule);
+    if (text) parts.push({ text, color: rule?.color });
+  }
+  return parts;
+}
+
 const extensionStatusesSegment: StatusLineSegment = {
   id: "extension_statuses",
   render(ctx) {
     const statuses = ctx.extensionStatuses;
     if (!statuses || statuses.size === 0) return { content: "", visible: false };
 
-    // Join compact statuses with a separator
-    // Skip: empty strings, notification-style ("[...") shown above editor,
-    // and strings that are only ANSI codes with no visible text.
-    // Also skip statuses explicitly elevated into dedicated custom segments.
-    const parts: string[] = [];
-    for (const statusKey of orderStatusKeys(statuses.keys(), ctx.statusOrder)) {
-      if (ctx.hiddenExtensionStatusKeys.has(statusKey)) continue;
-      const rule = ctx.statusFormats.get(statusKey);
-      const text = formatExtensionStatus(statuses.get(statusKey) ?? "", rule);
-      if (text) {
-        parts.push(rule?.color ? applyColor(ctx.theme, rule.color, text) : text);
-      }
-    }
+    // Compact statuses are joined with a separator; notification-style ("[...") statuses show above the editor.
+    const parts = extensionStatusParts(ctx).map(({ text, color }) => (color ? applyColor(ctx.theme, color, text) : text));
 
     if (parts.length === 0) return { content: "", visible: false };
 

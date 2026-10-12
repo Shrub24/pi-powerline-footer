@@ -42,6 +42,7 @@ export interface PowerlineConfig {
   statusFormats: Map<string, StatusFormatRule>;
   invalidStatusFormats: string[];
   statusOrder: string[];
+  statusStyle: "plain" | "blocks";
   disabledSegments: StatusLineSegmentId[];
   invalidDisabledSegments: string[];
   layout: StatusLineLayout | null;
@@ -429,6 +430,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     statusFormats: new Map(),
     invalidStatusFormats: [],
     statusOrder: [],
+    statusStyle: "plain",
     disabledSegments: [],
     invalidDisabledSegments: [],
     layout: null,
@@ -465,6 +467,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     customItems,
     statusFormats,
     invalidStatusFormats,
+    statusStyle: value.statusStyle === "blocks" ? "blocks" : "plain",
     statusOrder: Array.isArray(value.statusOrder)
       ? value.statusOrder.filter((key): key is string => typeof key === "string" && key.trim() !== "").map((key) => key.trim())
       : [],

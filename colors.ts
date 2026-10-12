@@ -57,6 +57,25 @@ function getAnsiCode(color: ColorName): string {
   return "";
 }
 
+/**
+ * A background escape for a theme token: its foreground colour escape with 38 turned into 48, so it
+ * follows the Pi theme. A hex colour is used as given. Undefined when the token has no colour: Pi's
+ * bundled theme can resolve a token to the terminal default, which is only a dim attribute.
+ */
+export function themeBackgroundEscape(theme: { getFgAnsi(token: string): string }, token: string): string | undefined {
+  if (token.startsWith("#")) {
+    const [r, g, b] = hexToRgb(token);
+    return ansi.getBgAnsi(r, g, b);
+  }
+  let colour: string | undefined;
+  try {
+    colour = theme.getFgAnsi(token).match(/^\x1b\[38;[\d;]*m/)?.[0];
+  } catch {
+    return undefined;
+  }
+  return colour?.replace("\x1b[38;", "\x1b[48;");
+}
+
 // Helper to apply foreground color only (no reset - caller manages reset)
 export function fgOnly(color: ColorName, text: string): string {
   const code = getAnsiCode(color);

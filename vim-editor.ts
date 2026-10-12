@@ -1,6 +1,7 @@
 import { copyToClipboard, CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { themeBackgroundEscape } from "./colors.ts";
 import type { EditorBackend, EditorBackendFactory } from "./editor-composition.ts";
 import type { EditorVimSettings } from "./powerline-config.ts";
 import { ModalEditor } from "./vim/index.ts";
@@ -13,7 +14,6 @@ import { enableCursorShapeSupport, type CursorShapeCleanup } from "./vim/cursor-
 const REVERSE_VIDEO = (text: string) => `\x1b[7m${text}\x1b[27m`;
 // Black text on the mode's background: readable on every mode colour the default theme uses.
 const BADGE_FOREGROUND = "\x1b[30m";
-const COLOUR_ESCAPE = /^\x1b\[38;[\d;]*m/;
 
 const CLIPBOARD_WRITE_TOOLS = ["wl-copy", "xclip", "xsel", "pbcopy", "clip", "termux-clipboard-set"];
 
@@ -59,14 +59,9 @@ export function vendorSeamMembers(): readonly string[] {
  * block. An unknown token takes the same path.
  */
 export function modeBadge(text: string, mode: ModeColorKey, colors: Record<ModeColorKey, string>, theme: { getFgAnsi(token: string): string }): string {
-  let colour: string | undefined;
-  try {
-    colour = theme.getFgAnsi(colors[mode].trim()).match(COLOUR_ESCAPE)?.[0];
-  } catch {
-    colour = undefined;
-  }
-  if (!colour) return `\x1b[7m${text}\x1b[27m`;
-  return `${colour.replace("\x1b[38;", "\x1b[48;")}${BADGE_FOREGROUND}${text}\x1b[39m\x1b[49m`;
+  const background = themeBackgroundEscape(theme, colors[mode].trim());
+  if (!background) return `\x1b[7m${text}\x1b[27m`;
+  return `${background}${BADGE_FOREGROUND}${text}\x1b[39m\x1b[49m`;
 }
 
 function vendorInternals(editor: ModalEditor): VendorInternals {

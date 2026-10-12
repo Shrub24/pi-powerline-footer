@@ -27,7 +27,8 @@ import { getPreset, PRESETS } from "./presets.ts";
 import { getAgentPath } from "./paths.ts";
 import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentOptions, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
 import { getSeparator } from "./separators.ts";
-import { renderSegment } from "./segments.ts";
+import { extensionStatusParts, renderSegment } from "./segments.ts";
+import { footerRows, renderStatusBlocks } from "./footer-statuses.ts";
 import { resolveThinkingLevelSelection } from "./thinking-level.ts";
 import { getGitStatus, invalidateGitStatus, invalidateGitBranch, subscribeGitUpdates } from "./git-status.ts";
 import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
@@ -82,6 +83,7 @@ let config: PowerlineConfig = {
   statusFormats: new Map(),
   invalidStatusFormats: [],
   statusOrder: [],
+  statusStyle: "plain",
   disabledSegments: [],
   invalidDisabledSegments: [],
   layout: null,
@@ -3138,8 +3140,13 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     // keep their own line in the footer, under the frame.
     if (config.editor.frame === "rounded") {
       const frame = getResponsiveLayout(width, theme).frame;
-      const statuses = frame ? renderSegmentContents(["extension_statuses"], frame.ctx).join(" ") : "";
-      return statuses ? [truncateToWidth(statuses, width, "…")] : [];
+      if (!frame) return [];
+      if (config.statusStyle === "blocks") {
+        const parts = extensionStatusParts(frame.ctx);
+        return footerRows(renderStatusBlocks(parts, width, theme, getSeparator("powerline").left));
+      }
+      const statuses = renderSegmentContents(["extension_statuses"], frame.ctx).join(" ");
+      return footerRows(statuses ? truncateToWidth(statuses, width, "…") : null);
     }
 
     return [...getResponsiveLayout(width, theme).secondaryLines];
