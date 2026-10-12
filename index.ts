@@ -99,7 +99,7 @@ let config: PowerlineConfig = {
   invalidSecondaryOverflow: null,
   welcome: true,
   stashSharpSShortcut: false,
-  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, vim: {} },
+  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: 1, invalidPadding: null, vim: {} },
   queue: { compactPromptMode: "queue" },
   sendDelayMs: 0,
   autoFollowUp: false,
@@ -1281,6 +1281,12 @@ function warnInvalidSegmentSettings(ctx: any): void {
 
   if (config.editor.invalidFrame !== null) {
     const message = `Ignoring invalid powerline editor frame: ${JSON.stringify(config.editor.invalidFrame)}`;
+    console.warn(`[powerline-footer] ${message}`);
+    if (ctx.hasUI) ctx.ui.notify(message, "warning");
+  }
+
+  if (config.editor.invalidPadding !== null) {
+    const message = `Ignoring invalid powerline editor padding: ${JSON.stringify(config.editor.invalidPadding)}`;
     console.warn(`[powerline-footer] ${message}`);
     if (ctx.hasUI) ctx.ui.notify(message, "warning");
   }
@@ -3689,16 +3695,17 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           const result: string[] = [];
           result.push(frameRows ? frameRows.top : renderFrameBorder(width, colorBorder));
 
-          for (let i = 1; i < bottomBorderIndex; i++) {
-            const prefix = i === 1 ? promptPrefix : contPrefix;
-            result.push(bodyRow(prefix, lines[i] || ""));
-          }
+          // Padding rows sit outside the editor's lines, so the cursor marker stays on its text row.
+          const blank = " ".repeat(contentWidth);
+          const paddingRows = Array.from({ length: rounded ? config.editor.padding : 0 }, () => bodyRow(contPrefix, blank));
 
-          // The rounded frame is two body rows tall by default; the default frame keeps one.
-          const minBodyRows = rounded ? 2 : 1;
-          for (let row = Math.max(0, bottomBorderIndex - 1); row < minBodyRows; row++) {
-            result.push(bodyRow(row === 0 ? promptPrefix : contPrefix, " ".repeat(contentWidth)));
-          }
+          // The rounded frame has two text rows at least; the default frame keeps one.
+          const textRows: string[] = lines.slice(1, bottomBorderIndex).map((line: string) => line || "");
+          while (textRows.length < (rounded ? 2 : 1)) textRows.push(blank);
+
+          result.push(...paddingRows);
+          textRows.forEach((text: string, index: number) => result.push(bodyRow(index === 0 ? promptPrefix : contPrefix, text)));
+          result.push(...paddingRows);
 
           result.push(frameRows ? frameRows.bottom : renderFrameBorder(width, colorBorder, getFrameLabel?.(Math.max(0, width - 2))));
 

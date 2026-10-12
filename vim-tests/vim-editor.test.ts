@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { visibleWidth, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, visibleWidth, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import type { EditorFactory } from "../editor-composition.ts";
 import { modeBadge, vendorSeamMembers } from "../vim-editor.ts";
 import { ModalEditor } from "../vim/index.ts";
@@ -303,13 +303,17 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
   // The label cell's background is the insert token (borderMuted → code 1), not the border rule's.
   assert.match(rawInsertFrame.at(-1)!, /\x1b\[48;5;1m\x1b\[30m INSERT /, "the label is a background block in the mode colour");
   const insertFrame = plain(rawInsertFrame);
-  assert.equal(insertFrame.length, 4, "top rule, two body rows and bottom rule");
+  // Top rule, one padding row, the two text rows, one padding row and the bottom rule.
+  assert.equal(insertFrame.length, 6, "top rule, padding, two text rows, padding and bottom rule");
   assert.ok(insertFrame[0]!.startsWith("\u256d") && insertFrame[0]!.endsWith("\u256e"));
   assert.match(insertFrame[0]!, /Test model/);
-  assert.ok(insertFrame[1]!.startsWith("\u2502 > ") && insertFrame[1]!.endsWith(" \u2502"));
+  assert.match(insertFrame[1]!, /^\u2502\s+\u2502$/, "the top padding row keeps the rails");
+  assert.ok(insertFrame[2]!.startsWith("\u2502 > ") && insertFrame[2]!.endsWith(" \u2502"), "the prompt is on the first text row");
+  assert.ok(insertFrame[3]!.startsWith("\u2502   ") && !insertFrame[3]!.includes(">"));
+  assert.match(insertFrame[4]!, /^\u2502\s+\u2502$/, "the bottom padding row keeps the rails");
   assert.ok(insertFrame.at(-1)!.startsWith("\u2570") && insertFrame.at(-1)!.endsWith("\u256f"));
   assert.match(insertFrame.at(-1)!, / INSERT /);
-  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), [FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH]);
+  assert.deepEqual(insertFrame.map((line) => visibleWidth(line)), Array(6).fill(FRAME_WIDTH));
 
   // The label is read at paint time, so a mode switch shows without any layout change.
   sendKeys(editor, ["\x1b"]);
@@ -318,6 +322,27 @@ test("the rounded frame carries the segments on its top rule and the live Vim la
   const normalFrame = plain(rawNormalFrame);
   assert.match(normalFrame.at(-1)!, / NORMAL /);
   assert.doesNotMatch(normalFrame.at(-1)!, / INSERT /);
+});
+
+test("padding 0 keeps the rounded frame at its two text rows, and padding is capped at three rows", async (t) => {
+  const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+
+  const flat = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 0 } });
+  const flatFrame = plain(flat.render());
+  assert.equal(flatFrame.length, 4, "top rule, two text rows and bottom rule");
+  assert.ok(flatFrame[1]!.startsWith("\u2502 > "));
+
+  const capped = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 9 } });
+  assert.equal(plain(capped.render()).length, 2 + 3 + 2 + 3, "padding of 9 is capped at 3 rows above and below");
+});
+
+test("the cursor marker stays on the first text row, below the top padding row", async (t) => {
+  const h = await vimHarness(t, { editor: { mode: "vim", frame: "rounded" } });
+  const editor = h.currentEditor();
+  editor.focused = true; // the editor emits the cursor marker only while focused
+  sendKeys(editor, ["i", "a", "b"]);
+  const raw = h.render();
+  assert.equal(raw.findIndex((line) => line.includes(CURSOR_MARKER)), 2, "the marker is on the text row, not a padding row");
 });
 
 test("a mode token with no colour escape gets a reverse-video label, never a bare dim attribute", () => {

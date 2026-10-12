@@ -33,6 +33,9 @@ export interface EditorConfig {
   invalidMode: string | null;
   frame: EditorFrame;
   invalidFrame: string | null;
+  /** Blank rows above and below the text inside the rounded frame. */
+  padding: number;
+  invalidPadding: string | null;
   vim: EditorVimSettings;
 }
 
@@ -307,6 +310,18 @@ function normalizeEditorFrame(value: unknown): { frame: EditorFrame; invalidFram
   };
 }
 
+const EDITOR_PADDING_DEFAULT = 1;
+const EDITOR_PADDING_MAX = 3;
+
+// Whole numbers from 0 up; larger values are capped rather than rejected.
+function normalizeEditorPadding(value: unknown): { padding: number; invalidPadding: string | null } {
+  if (value === undefined) return { padding: EDITOR_PADDING_DEFAULT, invalidPadding: null };
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return { padding: Math.min(value, EDITOR_PADDING_MAX), invalidPadding: null };
+  }
+  return { padding: EDITOR_PADDING_DEFAULT, invalidPadding: String(value) };
+}
+
 function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
   if (!isRecord(raw)) return undefined;
 
@@ -322,6 +337,7 @@ function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
 function normalizeEditor(value: unknown, globalValue: unknown): EditorConfig {
   const { mode, invalidMode } = normalizeEditorMode(isRecord(value) ? value.mode : undefined);
   const { frame, invalidFrame } = normalizeEditorFrame(isRecord(value) ? value.frame : undefined);
+  const { padding, invalidPadding } = normalizeEditorPadding(isRecord(value) ? value.padding : undefined);
   const vim = isRecord(value) && isRecord(value.vim) ? value.vim : {};
   const globalVim = isRecord(globalValue) && isRecord(globalValue.vim) ? globalValue.vim : {};
 
@@ -330,6 +346,8 @@ function normalizeEditor(value: unknown, globalValue: unknown): EditorConfig {
     invalidMode,
     frame,
     invalidFrame,
+    padding,
+    invalidPadding,
     vim: {
       clipboardMirror: vim.clipboardMirror,
       exCommand: vim.exCommand,
@@ -461,7 +479,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     invalidSecondaryOverflow: null,
     welcome: true,
     stashSharpSShortcut: false,
-    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, vim: {} },
+    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: EDITOR_PADDING_DEFAULT, invalidPadding: null, vim: {} },
     queue: { compactPromptMode: "queue" },
     sendDelayMs: 0,
     autoFollowUp: false,
