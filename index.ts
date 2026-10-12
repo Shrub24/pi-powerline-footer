@@ -1143,7 +1143,7 @@ function computeRoundedFrameLayout(
       left: renderSegmentContents(segments.leftSegments, ctx),
       right: renderSegmentContents(segments.rightSegments, ctx),
     },
-    bottomLeft: renderSegmentContents(segments.secondarySegments.filter((id) => id !== "vim_mode"), ctx),
+    bottomLeft: renderSegmentContents(segments.secondarySegments.filter((id) => id !== "vim_mode" && id !== "extension_statuses"), ctx),
   };
 }
 
@@ -3122,8 +3122,14 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   }
 
   function renderPowerlineSecondaryLines(width: number, theme: Theme): string[] {
-    // The rounded frame carries the secondary segments in its bottom border.
-    if (!currentCtx || config.editor.frame === "rounded") return [];
+    if (!currentCtx) return [];
+    // The rounded frame carries the secondary segments in its bottom border; extension statuses
+    // keep their own line in the footer, under the frame.
+    if (config.editor.frame === "rounded") {
+      const frame = getResponsiveLayout(width, theme).frame;
+      const statuses = frame ? renderSegmentContents(["extension_statuses"], frame.ctx).join(" ") : "";
+      return statuses ? [truncateToWidth(statuses, width, "…")] : [];
+    }
 
     return [...getResponsiveLayout(width, theme).secondaryLines];
   }
