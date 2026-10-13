@@ -3114,6 +3114,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
    * The segment context scans session state, so keep it stable across render bursts.
    */
   function getResponsiveLayout(width: number, theme: Theme): ResponsiveLayout {
+    if (!currentCtx) return { topContent: "", secondaryLines: [] };
+
     const now = Date.now();
     const cacheTtl = isStreaming ? STREAMING_LAYOUT_CACHE_TTL_MS : LAYOUT_CACHE_TTL_MS;
 
