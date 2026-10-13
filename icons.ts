@@ -192,20 +192,11 @@ export const ASCII_SEPARATORS: SeparatorChars = {
   dot: ".",
 };
 
-// Infer Nerd Font support from environment overrides and terminal-name heuristics.
+// Nerd Font glyphs are the default. Terminal names cannot tell whether the font has them (multiplexers
+// such as tmux and herdr hide the emulator), so POWERLINE_NERD_FONTS=0 selects ASCII instead.
+// HACK: the env var is the only switch; a settings key would need the config threaded into every icon call.
 export function hasNerdFonts(): boolean {
-  // User can set this env var to force Nerd Fonts
-  if (process.env.POWERLINE_NERD_FONTS === "1") return true;
-  if (process.env.POWERLINE_NERD_FONTS === "0") return false;
-  
-  // Check for Ghostty (survives into tmux via GHOSTTY_RESOURCES_DIR)
-  if (process.env.GHOSTTY_RESOURCES_DIR) return true;
-  
-  // Use TERM only when TERM_PROGRAM is unset (e.g. kitty uses TERM=xterm-kitty).
-  // Terminal names are a heuristic, not detection of the configured font.
-  const term = (process.env.TERM_PROGRAM ?? process.env.TERM ?? "").toLowerCase();
-  const nerdTerms = ["iterm", "wezterm", "kitty", "ghostty", "alacritty", "kaku"];
-  return nerdTerms.some(t => term.includes(t));
+  return process.env.POWERLINE_NERD_FONTS !== "0";
 }
 
 export function getIcons(): IconSet {
