@@ -130,7 +130,7 @@ function centredOffset(width: number, line: number, reserve: number): number {
 
 /**
  * The footer line under the rounded frame, one row below it. Items are the footer groups followed by the
- * extension statuses. `right` is one pill flush right on the same row, reserved before the items fit.
+ * extension statuses. `right` is one pill flush right; it truncates or disappears before those items are dropped.
  * Pills are centred; blocks and plain are left-aligned. Nothing renders when there is nothing to show.
  */
 export function renderFooterRows(
@@ -141,26 +141,41 @@ export function renderFooterRows(
   chrome: FooterChrome,
   right?: StatusBlock,
 ): string[] {
-  const rightPainted = right ? paintAll([right], theme, items.length)[0] : undefined;
-  const rightPill = rightPainted ? pillLine([rightPainted], chrome, theme) : "";
-  const rightWidth = visibleWidth(rightPill) < width ? visibleWidth(rightPill) : 0;
-  const reserve = rightWidth > 0 ? rightWidth + 1 : 0;
-  const budget = width - reserve;
-
+  let rightPainted = right ? paintAll([right], theme, items.length)[0] : undefined;
   let line: string;
   if (style === "plain") {
     const pieces = items
       .filter(({ text }) => text)
       .map(({ text, color }) => ({ text: color ? applyColor(theme, color, text) : text }));
     const build = (kept: typeof pieces) => kept.map(({ text }) => bold(text)).join(PLAIN_GAP);
-    line = build(fitItems(pieces, budget, build));
+    line = build(fitItems(pieces, width, build));
   } else {
     const build = (kept: Painted[]) => (style === "pills" ? pillLine(kept, chrome, theme) : blockLine(kept, chrome, theme));
-    line = build(fitItems(paintAll(items, theme), budget, build));
+    line = build(fitItems(paintAll(items, theme), width, build));
+  }
+
+  const lineWidth = visibleWidth(line);
+  const availableRightWidth = width - lineWidth - 1;
+  let rightPill = "";
+  let rightWidth = 0;
+  if (rightPainted && availableRightWidth > 0) {
+    const emptyPillWidth = visibleWidth(pillLine([{ ...rightPainted, text: "" }], chrome, theme));
+    const textWidth = availableRightWidth - emptyPillWidth;
+    if (textWidth > 0) {
+      if (visibleWidth(rightPainted.text) > textWidth) {
+        rightPainted = { ...rightPainted, text: truncateToWidth(rightPainted.text, textWidth, "…"), members: undefined };
+      }
+      rightPill = pillLine([rightPainted], chrome, theme);
+      rightWidth = visibleWidth(rightPill);
+      if (rightWidth > availableRightWidth) {
+        rightPill = "";
+        rightWidth = 0;
+      }
+    }
   }
 
   if (!line && rightWidth === 0) return [];
-  const lineWidth = visibleWidth(line);
+  const reserve = rightWidth > 0 ? rightWidth + 1 : 0;
   const offset = style === "pills" ? centredOffset(width, lineWidth, reserve) : 0;
   const pad = width - offset - lineWidth - rightWidth;
   return ["", `${" ".repeat(offset)}${line}${" ".repeat(pad)}${rightWidth > 0 ? rightPill : ""}`];

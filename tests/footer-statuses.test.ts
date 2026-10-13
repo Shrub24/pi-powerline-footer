@@ -43,13 +43,14 @@ test("the joined pills are centred, the extra column going to the right", () => 
   assert.equal(plainText(row(items, 20, "pills", ASCII)), "    ( mc | git )    ", "even slack splits evenly");
 });
 
-test("the right item is flush right and reserved first, and the line is centred over the room left of it", () => {
+test("the right item truncates before the leading footer items are dropped", () => {
   const items = [{ text: "mc" }, { text: "git" }];
   const time = { text: "12:00" };
-  // "( 12:00 )" is 9 columns and needs one more as a gap: 10 are reserved, so "git" drops.
-  // The symmetric spot would leave 7 columns on the right, short of 10, so the line centres in the 10 left of it.
-  assert.equal(plainText(row(items, 20, "pills", ASCII, time)), "  ( mc )   ( 12:00 )");
-  // Here the symmetric spot clears the right item, so the full width centres the whole line.
+  // The main line wins; the time pill uses the remaining seven columns.
+  assert.equal(plainText(row(items, 20, "pills", ASCII, time)), "( mc | git ) ( 12… )");
+  // With too little room even for a useful time pill, the time is omitted and both main items stay.
+  assert.equal(plainText(row(items, 15, "pills", ASCII, time)).trim(), "( mc | git )");
+  // With room, the complete time remains flush right and the main line is centred in the space left of it.
   assert.equal(plainText(row(items, 32, "pills", ASCII, time)), `${" ".repeat(10)}( mc | git ) ( 12:00 )`);
 });
 

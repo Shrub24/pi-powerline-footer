@@ -480,7 +480,7 @@ const timeSegment: StatusLineSegment = {
   },
 };
 
-const SESSION_NAME_MAX_WIDTH = 32;
+const SESSION_NAME_MAX_WIDTH = 48;
 
 const sessionSegment: StatusLineSegment = {
   id: "session",

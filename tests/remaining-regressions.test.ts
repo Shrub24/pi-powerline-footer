@@ -65,8 +65,8 @@ test("session segment shows the current display name when available", () => {
     sessionName: "My working session with a very long name here",
   }));
 
-  // Names longer than 32 columns are cut with an ellipsis.
-  assert.equal(stripAnsi(rendered.content), "My working session with a very \u2026");
+  // Names up to the 48-column limit stay intact.
+  assert.equal(stripAnsi(rendered.content), "My working session with a very long name here");
   assert.equal(rendered.content.includes("12345678"), false);
   assert.equal(rendered.visible, true);
 });

@@ -39,13 +39,20 @@ function groupWidth(parts: string[], separator: string): number {
   return parts.length === 0 ? 0 : visibleWidth(parts.join(` ${separator} `)) + 2;
 }
 
-/** Keeps whole parts, in order, from one end while the group still fits the budget. */
-function fitGroup(parts: string[], budget: number, separator: string, fromEnd = false): string[] {
+/** Keeps parts from one end; optionally truncates the lowest-priority boundary part to fit. */
+function fitGroup(parts: string[], budget: number, separator: string, fromEnd = false, truncateBoundary = false): string[] {
   let kept: string[] = [];
   for (const part of fromEnd ? [...parts].reverse() : parts) {
     const next = fromEnd ? [part, ...kept] : [...kept, part];
-    if (groupWidth(next, separator) > budget) break;
-    kept = next;
+    if (groupWidth(next, separator) <= budget) {
+      kept = next;
+      continue;
+    }
+    if (truncateBoundary && fromEnd && kept.length === 0) {
+      const contentWidth = budget - 2;
+      if (contentWidth > 0) kept = [truncateToWidth(part, contentWidth, "…")];
+    }
+    break;
   }
   return kept;
 }
@@ -66,7 +73,7 @@ export function renderRoundedFrame(options: {
   const budget = width - FRAME_CHROME_WIDTH;
 
   const topLeft = fitGroup(options.top.left, budget, separator);
-  const topRight = fitGroup(options.top.right, budget - groupWidth(topLeft, separator), separator, true);
+  const topRight = fitGroup(options.top.right, budget - groupWidth(topLeft, separator), separator, true, true);
 
   const bottomRight = fitGroup(options.bottom.right, budget, separator, true);
   const bottomLeft = fitGroup(options.bottom.left, budget - groupWidth(bottomRight, separator), separator);

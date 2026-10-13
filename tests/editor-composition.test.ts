@@ -121,6 +121,11 @@ test("the rounded frame keeps whole segments: the top fills left first, the bott
   const tight = frame(16, { left: ["model", "path", "git"], right: ["cost", "ctx"] }, { left: [], right: [] });
   assert.equal(tight.top, "\u256d\u2500 model  ctx \u2500\u256e");
 
+  // The title on the right shrinks into leftover space rather than displacing the left group.
+  const fittedTitle = frame(20, { left: ["model"], right: ["long session title"] }, { left: [], right: [] });
+  assert.match(fittedTitle.top.replace(/\x1b\[[0-9;]*m/g, ""), /long s…/);
+  assert.equal(visibleWidth(fittedTitle.top), 20);
+
   // The Vim label is reserved before the bottom's secondary segments, so the segments give way.
   const labelled = frame(20, { left: [], right: [] }, { left: ["extension"], right: [" NORMAL "] });
   assert.equal(labelled.bottom, "\u2570" + "\u2500".repeat(7) + "  NORMAL  " + "\u2500\u256f");
