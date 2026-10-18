@@ -2111,6 +2111,11 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
   // Generate themed working message before agent starts (has access to user's prompt)
   pi.on("before_agent_start", async (event, ctx) => {
+    // A run started by a custom message (`messageType: "custom"`, e.g. another extension's
+    // `sendMessage(..., { triggerTurn: true })`) carries no prompt text, so nothing prompt-derived may run:
+    // no queue acknowledgement, no last-prompt update, no vibe generation.
+    if (typeof event.prompt !== "string") return;
+
     finishPendingQueueDelivery(event.prompt, ctx);
     lastUserPrompt = event.prompt;
     if (ctx.hasUI) {
