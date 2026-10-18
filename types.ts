@@ -203,6 +203,7 @@ export interface UsageStats {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  // Cost of the active provider/model's assistant messages in this session.
   cost: number;
   // Cumulative cost of subagent child runs (e.g. /parallel, /worker) launched from this session.
   subagentCost: number;

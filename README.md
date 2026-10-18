@@ -226,11 +226,13 @@ Use `"model": { "display": "qualified" }` when two providers expose models with 
 
 Subscription cost display accepts:
 
-| Mode | Subscription + reported cost | Subscription + no reported cost |
-|------|------------------------------|----------------------------------|
-| `subscription` | `(sub)` | `(sub)` |
-| `reported-cost` | `$0.12` | `(sub)` |
-| `both` | `$0.12 (sub)` | `(sub)` |
+The cost segment shows spend for the active provider/model in this session, so switching models shows that model's own cost. Subscription cost is priced from the model catalogue, so it is shown by default. A subscription login is marked with `↻`. The mode defaults to `both`:
+
+| Mode | Subscription + cost | Subscription + zero cost |
+|------|---------------------|---------------------------|
+| `subscription` | `↻` | `↻` |
+| `reported-cost` | `$0.12` | `$0.00` |
+| `both` (default) | `$0.12 ↻` | `$0.00 ↻` |
 
 Segment display formats (opt-in; defaults match the historical rendering):
 

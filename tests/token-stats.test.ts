@@ -103,6 +103,41 @@ test("computeSessionTokenStats aggregates usage and tracks thinking level", () =
   assert.equal(stats.thinkingLevelFromSession, "high");
 });
 
+test("costByModel keeps each provider/model's spend separate across a mid-session switch", () => {
+  // makeUsage's total is 15 tokens x costPerToken, so 0.02 gives 0.30 per message.
+  const onModel = (provider: string, model: string, costPerToken: number) => ({
+    type: "message",
+    message: { role: "assistant", provider, model, usage: makeUsage(10, 5, 0, 0, costPerToken), stopReason: "stop" },
+  });
+  const events = [
+    onModel("anthropic", "claude-opus", 0.02),
+    onModel("openai-codex", "gpt-5.4", 0.01),
+    onModel("anthropic", "claude-opus", 0.02),
+  ];
+
+  const stats = computeSessionTokenStats(events);
+
+  assert.ok(Math.abs(stats.costByModel["anthropic/claude-opus"] - 0.6) < 1e-9);
+  assert.ok(Math.abs(stats.costByModel["openai-codex/gpt-5.4"] - 0.15) < 1e-9);
+  assert.ok(Math.abs(stats.cost - 0.75) < 1e-9);
+});
+
+test("cache keeps costByModel in step as appended messages switch model", () => {
+  const cache = new SessionTokenStatsCache();
+  // 15 tokens x 0.5 = 7.5 for the first message; 15 x 0.1 = 1.5 for the second.
+  const onModel = (model: string, costPerToken: number) => ({
+    type: "message",
+    message: { role: "assistant", provider: "anthropic", model, usage: makeUsage(10, 5, 0, 0, costPerToken), stopReason: "stop" },
+  });
+  const events: unknown[] = [onModel("claude-opus", 0.5)];
+  assert.ok(Math.abs(cache.get(events).costByModel["anthropic/claude-opus"] - 7.5) < 1e-9);
+
+  events.push(onModel("claude-haiku", 0.1));
+  const after = cache.get(events);
+  assert.ok(Math.abs(after.costByModel["anthropic/claude-opus"] - 7.5) < 1e-9);
+  assert.ok(Math.abs(after.costByModel["anthropic/claude-haiku"] - 1.5) < 1e-9);
+});
+
 test("computeSessionTokenStats sums subagent child run cost from tool results and slash results", () => {
   const events = [
     userEvent(),

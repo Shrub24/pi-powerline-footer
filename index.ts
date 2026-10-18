@@ -3017,7 +3017,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     // event's stats-relevant fields change, e.g. in-place streaming updates)
     const sessionEvents = sessionBranchCache.get(ctx.sessionManager);
     const tokenStats = tokenStatsCache.get(sessionEvents);
-    const { input, output, cacheRead, cacheWrite, cost, subagentCost } = tokenStats;
+    const { input, output, cacheRead, cacheWrite, subagentCost } = tokenStats;
+    // Cost is scoped to the active provider/model so switching models shows that model's own spend.
+    const activeModelKey = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+    const activeModelCost = activeModelKey ? tokenStats.costByModel[activeModelKey] ?? 0 : 0;
     const lastAssistant = tokenStats.lastAssistant;
     const thinkingLevelFromSession = tokenStats.thinkingLevelFromSession;
 
@@ -3079,7 +3082,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       sessionId: ctx.sessionManager?.getSessionId?.(),
       sessionName: ctx.sessionManager?.getSessionName?.(),
       cwd: ctx.cwd,
-      usageStats: { input, output, cacheRead, cacheWrite, cost, subagentCost },
+      usageStats: { input, output, cacheRead, cacheWrite, cost: activeModelCost, subagentCost },
       speed: lastSpeed,
       tool: toolActivity.activity,
       userTurnCount,

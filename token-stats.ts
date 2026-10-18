@@ -8,6 +8,8 @@ export interface SessionTokenStats {
   cacheRead: number;
   cacheWrite: number;
   cost: number;
+  /** Assistant-message cost keyed by `provider/model`, so the footer can show spend for the active model. */
+  costByModel: Record<string, number>;
   subagentCost: number;
   lastAssistant: AssistantMessage | undefined;
   thinkingLevelFromSession: string | null;
@@ -39,6 +41,12 @@ function isSessionAssistantMessage(value: unknown): value is AssistantMessage {
     && value.role === "assistant"
     && hasSessionAssistantUsage(value.usage)
     && (value.stopReason === undefined || typeof value.stopReason === "string");
+}
+
+function addModelCost(costByModel: Record<string, number>, message: AssistantMessage): void {
+  if (typeof message.provider !== "string" || typeof message.model !== "string") return;
+  const key = `${message.provider}/${message.model}`;
+  costByModel[key] = (costByModel[key] ?? 0) + message.usage.cost.total;
 }
 
 function getUsageTokenTotal(usage: SessionAssistantUsage): number {
@@ -121,6 +129,7 @@ function emptySessionTokenStats(): SessionTokenStats {
     cacheRead: 0,
     cacheWrite: 0,
     cost: 0,
+    costByModel: {},
     subagentCost: 0,
     lastAssistant: undefined,
     thinkingLevelFromSession: null,
@@ -128,7 +137,7 @@ function emptySessionTokenStats(): SessionTokenStats {
 }
 
 function copySessionTokenStats(stats: SessionTokenStats): SessionTokenStats {
-  return { ...stats };
+  return { ...stats, costByModel: { ...stats.costByModel } };
 }
 
 function accumulateSessionEvent(stats: SessionTokenStats, event: unknown): void {
@@ -150,6 +159,7 @@ function accumulateSessionEvent(stats: SessionTokenStats, event: unknown): void 
   stats.cacheRead += message.usage.cacheRead;
   stats.cacheWrite += message.usage.cacheWrite;
   stats.cost += message.usage.cost.total;
+  addModelCost(stats.costByModel, message);
   if (getUsageTokenTotal(message.usage) > 0) {
     stats.lastAssistant = message;
   }
@@ -198,6 +208,7 @@ export function computeSessionTokenStats(sessionEvents: readonly unknown[]): Ses
   let input = 0, output = 0, cacheRead = 0, cacheWrite = 0, cost = 0, subagentCost = 0;
   let lastAssistant: AssistantMessage | undefined;
   let thinkingLevelFromSession: string | null = null;
+  const costByModel: Record<string, number> = {};
 
   for (const e of sessionEvents) {
     if (!isRecord(e)) continue;
@@ -218,12 +229,13 @@ export function computeSessionTokenStats(sessionEvents: readonly unknown[]): Ses
     cacheRead += m.usage.cacheRead;
     cacheWrite += m.usage.cacheWrite;
     cost += m.usage.cost.total;
+    addModelCost(costByModel, m);
     if (getUsageTokenTotal(m.usage) > 0) {
       lastAssistant = m;
     }
   }
 
-  return { input, output, cacheRead, cacheWrite, cost, subagentCost, lastAssistant, thinkingLevelFromSession };
+  return { input, output, cacheRead, cacheWrite, cost, costByModel, subagentCost, lastAssistant, thinkingLevelFromSession };
 }
 
 /**

@@ -168,6 +168,11 @@ test("cost segment supports subscription display modes and converted currencies"
     usageStats: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.42, subagentCost: 0 },
     options: { cost: { subscriptionDisplay: "both" } },
   }));
+  const subscriptionOnly = renderSegment("cost", createSegmentContext({
+    usingSubscription: true,
+    usageStats: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.42, subagentCost: 0 },
+    options: { cost: { subscriptionDisplay: "subscription" } },
+  }));
   const zeroReported = renderSegment("cost", createSegmentContext({
     usingSubscription: true,
     options: { cost: { subscriptionDisplay: "reported-cost" } },
@@ -186,11 +191,12 @@ test("cost segment supports subscription display modes and converted currencies"
 
   __resetCurrencyRatesForTest();
 
-  assert.deepEqual(subscription, { content: "(sub)", visible: true });
+  assert.deepEqual(subscription, { content: "$0.42 ↻", visible: true });
+  assert.deepEqual(subscriptionOnly, { content: "↻", visible: true });
   assert.deepEqual(reportedCost, { content: "$0.42", visible: true });
-  assert.deepEqual(both, { content: "$0.42 (sub)", visible: true });
-  assert.deepEqual(zeroReported, { content: "(sub)", visible: true });
-  assert.deepEqual(zeroBoth, { content: "(sub)", visible: true });
+  assert.deepEqual(both, { content: "$0.42 ↻", visible: true });
+  assert.deepEqual(zeroReported, { content: "$0.00", visible: true });
+  assert.deepEqual(zeroBoth, { content: "$0.00 ↻", visible: true });
   assert.deepEqual(withSubagentCost, { content: "$1.00", visible: true });
   assert.deepEqual(convertedCurrency, { content: "¥9.00", visible: true });
 });

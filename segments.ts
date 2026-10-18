@@ -356,6 +356,9 @@ const tokenTotalSegment: StatusLineSegment = {
   },
 };
 
+/** Marks cost that comes from a subscription login rather than per-request billing. */
+const SUBSCRIPTION_MARKER = "↻";
+
 const costSegment: StatusLineSegment = {
   id: "cost",
   render(ctx) {
@@ -377,10 +380,12 @@ const costSegment: StatusLineSegment = {
       return reportedCost ? shown(reportedCost) : { content: "", visible: false };
     }
 
-    const subscriptionDisplay = ctx.options.cost?.subscriptionDisplay ?? "subscription";
-    if (subscriptionDisplay === "reported-cost" && reportedCost) return shown(reportedCost);
-    if (subscriptionDisplay === "both" && reportedCost) return shown(`${reportedCost} (sub)`);
-    return shown("(sub)");
+    // Subscription usage is priced from the model catalogue like any other, so the figure is shown with a marker.
+    const subscriptionDisplay = ctx.options.cost?.subscriptionDisplay ?? "both";
+    const subscriptionCost = formatUsdCost(cost, ctx.options.cost?.currency);
+    if (subscriptionDisplay === "subscription") return shown(SUBSCRIPTION_MARKER);
+    if (subscriptionDisplay === "reported-cost") return shown(subscriptionCost ?? SUBSCRIPTION_MARKER);
+    return shown(`${subscriptionCost ?? "--"} ${SUBSCRIPTION_MARKER}`);
   },
 };
 
