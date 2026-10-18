@@ -248,6 +248,33 @@ describe("dot repeat review regressions", () => {
     assert.equal(editor.getText(), "a\na\nb\na\nb\na\nb\nb\norig");
   });
 
+  it("undoes and redoes a bracketed paste inserted in insert mode as one edit", () => {
+    const { editor } = createEditorWithSpy("abc");
+
+    sendKeys(editor, ["i", "\x1b[200~PASTE\x1b[201~", ESC]);
+    assert.equal(editor.getText(), "PASTEabc");
+
+    sendKeys(editor, ["u"]);
+    assert.equal(editor.getText(), "abc");
+
+    sendKeys(editor, [CTRL_R]);
+    assert.equal(editor.getText(), "PASTEabc");
+  });
+
+  it("undoes a Pi host insertion without discarding earlier user edits", () => {
+    const { editor } = createEditorWithSpy("abc");
+
+    sendKeys(editor, ["x"]);
+    editor.insertTextAtCursor("paste");
+    assert.equal(editor.getText(), "pastebc");
+
+    sendKeys(editor, ["u"]);
+    assert.equal(editor.getText(), "bc");
+
+    sendKeys(editor, ["u"]);
+    assert.equal(editor.getText(), "abc");
+  });
+
   it("cancels repeat recording for programmatic insertTextAtCursor changes", () => {
     const { editor } = createMultiLineEditor("alpha beta");
 

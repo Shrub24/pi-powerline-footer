@@ -171,6 +171,7 @@ async function vimHarness(
 
   return {
     currentEditor: () => editor,
+    selectModel: () => handlers.get("model_select")?.({ model: { provider: "test", id: "next" } }, ctx),
     piProvider,
     render: (width = FRAME_WIDTH) => editor.render(width) as string[],
     editors,
@@ -185,6 +186,20 @@ async function vimHarness(
     shutdown: (reason: string) => handlers.get("session_shutdown")?.({ reason }, ctx) as Promise<void>,
   };
 }
+
+test("Pi model selection preserves the Vim editor and its undo history", async (t) => {
+  const h = await vimHarness(t);
+  const editor = h.currentEditor();
+
+  sendKeys(editor, ["a", "b", "c", "\x1b"]);
+  assert.equal(editor.getText(), "abc");
+
+  await h.selectModel();
+  assert.strictEqual(h.currentEditor(), editor);
+
+  sendKeys(editor, ["u"]);
+  assert.equal(editor.getText(), "");
+});
 
 test("the mode label is drawn once on the frame in insert, normal and Ex states", async (t) => {
   const h = await vimHarness(t);
