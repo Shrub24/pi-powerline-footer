@@ -100,7 +100,7 @@ let config: PowerlineConfig = {
   invalidSecondaryOverflow: null,
   welcome: true,
   stashSharpSShortcut: false,
-  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: { top: 1, bottom: 0 }, invalidPadding: null, vim: {} },
+  editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: { top: 1, bottom: 0 }, invalidPadding: null, minRows: null, invalidMinRows: null, vim: {} },
   queue: { compactPromptMode: "queue" },
   sendDelayMs: 0,
   autoFollowUp: false,
@@ -1287,8 +1287,8 @@ function warnInvalidSegmentSettings(ctx: any): void {
     if (ctx.hasUI) ctx.ui.notify(message, "warning");
   }
 
-  if (config.editor.invalidPadding !== null) {
-    const message = `Ignoring invalid powerline editor padding: ${JSON.stringify(config.editor.invalidPadding)}`;
+  if (config.editor.invalidMinRows !== null) {
+    const message = `Ignoring invalid powerline editor minRows: ${JSON.stringify(config.editor.invalidMinRows)}`;
     console.warn(`[powerline-footer] ${message}`);
     if (ctx.hasUI) ctx.ui.notify(message, "warning");
   }
@@ -3729,9 +3729,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           const padding = rounded ? config.editor.padding : { top: 0, bottom: 0 };
           const paddingRow = () => bodyRow(contPrefix, blank);
 
-          // The rounded frame has two text rows at least; the default frame keeps one.
+          // The frame reserves its own floor (two rows rounded, one plain); `minRows` raises it.
           const textRows: string[] = lines.slice(1, bottomBorderIndex).map((line: string) => line || "");
-          while (textRows.length < (rounded ? 2 : 1)) textRows.push(blank);
+          const minRows = config.editor.minRows ?? (rounded ? 2 : 1);
+          while (textRows.length < minRows) textRows.push(blank);
 
           result.push(...Array.from({ length: padding.top }, paddingRow));
           textRows.forEach((text: string, index: number) => result.push(bodyRow(index === 0 ? promptPrefix : contPrefix, text)));

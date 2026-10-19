@@ -36,6 +36,9 @@ export interface EditorConfig {
   /** Blank rows above and below the text inside the rounded frame. */
   padding: EditorPadding;
   invalidPadding: string | null;
+  /** Text rows the frame keeps even when the draft is shorter. Rounded frames default to two, the default frame to one. */
+  minRows: number | null;
+  invalidMinRows: string | null;
   vim: EditorVimSettings;
 }
 
@@ -336,6 +339,9 @@ export interface EditorPadding {
 
 const EDITOR_PADDING_DEFAULT: Readonly<EditorPadding> = { top: 1, bottom: 0 };
 const EDITOR_PADDING_MAX = 3;
+/** The frame already reserves these rows, so the setting only ever raises the floor. */
+const EDITOR_MIN_ROWS_DEFAULT = { rounded: 2, default: 1 } as const;
+const EDITOR_MIN_ROWS_MAX = 12;
 
 // One side: whole numbers from 0 up, capped at the maximum rather than rejected; anything else is invalid.
 function editorPaddingSide(value: unknown, fallback: number): number | null {
@@ -358,6 +364,15 @@ function normalizeEditorPadding(value: unknown): { padding: EditorPadding; inval
   };
 }
 
+// Whole rows from 1 up, capped rather than rejected; anything else is invalid and the frame keeps its default.
+function normalizeEditorMinRows(value: unknown): { minRows: number | null; invalidMinRows: string | null } {
+  if (value === undefined) return { minRows: null, invalidMinRows: null };
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1) {
+    return { minRows: Math.min(value, EDITOR_MIN_ROWS_MAX), invalidMinRows: null };
+  }
+  return { minRows: null, invalidMinRows: typeof value === "object" ? JSON.stringify(value) : String(value) };
+}
+
 function normalizeVimModeColors(raw: unknown): EditorVimModeColors | undefined {
   if (!isRecord(raw)) return undefined;
 
@@ -374,6 +389,7 @@ function normalizeEditor(value: unknown, globalValue: unknown): EditorConfig {
   const { mode, invalidMode } = normalizeEditorMode(isRecord(value) ? value.mode : undefined);
   const { frame, invalidFrame } = normalizeEditorFrame(isRecord(value) ? value.frame : undefined);
   const { padding, invalidPadding } = normalizeEditorPadding(isRecord(value) ? value.padding : undefined);
+  const { minRows, invalidMinRows } = normalizeEditorMinRows(isRecord(value) ? value.minRows : undefined);
   const vim = isRecord(value) && isRecord(value.vim) ? value.vim : {};
   const globalVim = isRecord(globalValue) && isRecord(globalValue.vim) ? globalValue.vim : {};
 
@@ -384,6 +400,8 @@ function normalizeEditor(value: unknown, globalValue: unknown): EditorConfig {
     invalidFrame,
     padding,
     invalidPadding,
+    minRows,
+    invalidMinRows,
     vim: {
       clipboardMirror: vim.clipboardMirror,
       exCommand: vim.exCommand,
@@ -515,7 +533,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     invalidSecondaryOverflow: null,
     welcome: true,
     stashSharpSShortcut: false,
-    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: { ...EDITOR_PADDING_DEFAULT }, invalidPadding: null, vim: {} },
+    editor: { mode: "default", invalidMode: null, frame: "default", invalidFrame: null, padding: { ...EDITOR_PADDING_DEFAULT }, invalidPadding: null, minRows: null, invalidMinRows: null, vim: {} },
     queue: { compactPromptMode: "queue" },
     sendDelayMs: 0,
     autoFollowUp: false,

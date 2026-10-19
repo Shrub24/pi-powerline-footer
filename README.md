@@ -399,6 +399,26 @@ After changing bindings, run `/reload`. Invalid bindings fall back to safe defau
 
 Powerline wraps Pi's autocomplete provider so bash mode can add shell-aware suggestions. When another editor extension was already installed, powerline now passes Pi's provider through that previous editor's `setAutocompleteProvider()` first and then wraps the resulting provider. This preserves prior autocomplete-provider wrappers where possible, but it is not full render/input composition between custom editors.
 
+## Editor frame
+
+`powerline.editor.frame` selects the editor chrome. The default frame is Pi's own single-row rule; `"rounded"` draws a box whose top border carries the left and right segment groups and whose bottom border carries the secondary segments and the Vim mode label. Any other value warns once and falls back to the default frame.
+
+```json
+{
+  "powerline": {
+    "editor": {
+      "frame": "rounded",
+      "padding": { "top": 1, "bottom": 0 },
+      "minRows": 2
+    }
+  }
+}
+```
+
+`padding` adds blank rows above and below the text inside the rounded frame. It takes a number for both sides or an object `{ top, bottom }`; each side is a whole number from 0 to 3, values above 3 are capped, and the default is one row above and none below. The default frame ignores padding.
+
+`minRows` is the number of text rows the frame keeps even when the draft is shorter. Whole numbers from 1 to 12, values above 12 are capped, and any other value warns once and leaves the frame on its default: two rows in the rounded frame, one in the default frame. Padding rows are counted separately and sit outside the text rows.
+
 ## Vim editor
 
 Set `powerline.editor.mode` to `"vim"` to edit with a Vim-style modal editor instead of Powerline's default one. The mode is read at startup: there is no runtime switching and no `/powerline` subcommand for it. Any other value warns once and falls back to the default editor.

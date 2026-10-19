@@ -354,6 +354,28 @@ test("padding 0 keeps the rounded frame at its two text rows, and padding is cap
   assert.equal(plain(capped.render()).length, 2 + 3 + 2 + 3, "padding of 9 is capped at 3 rows above and below");
 });
 
+test("minRows raises the frame's text-row floor and caps at twelve rows", async (t) => {
+  const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+
+  const roomier = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 0, minRows: 4 } });
+  const roomierFrame = plain(roomier.render());
+  assert.equal(roomierFrame.length, 1 + 4 + 1, "top rule, four text rows and bottom rule");
+  assert.ok(roomierFrame[1]!.startsWith("\u2502 > "), "the prompt sits on the first text row");
+  assert.equal(roomierFrame[2]!.replace(/\s+/g, ""), "\u2502\u2502", "the reserved rows are empty but keep the rails");
+
+  const capped = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 0, minRows: 40 } });
+  assert.equal(plain(capped.render()).length, 1 + 12 + 1, "minRows of 40 is capped at twelve rows");
+});
+
+test("an invalid minRows leaves the frame on its default floor", async (t) => {
+  const plain = (lines: string[]) => lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+
+  for (const minRows of [0, 2.5, "3"]) {
+    const h = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: 0, minRows } });
+    assert.equal(plain(h.render()).length, 1 + 2 + 1, `minRows ${JSON.stringify(minRows)} keeps the rounded floor of two rows`);
+  }
+});
+
 test("a padding object sets the top and bottom rows separately", async (t) => {
   const h = await vimHarness(t, { editor: { mode: "vim", frame: "rounded", padding: { top: 2, bottom: 1 } } });
   const frame = h.render().map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
